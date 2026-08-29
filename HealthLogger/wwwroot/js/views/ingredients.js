@@ -284,6 +284,7 @@ Object.assign(App.prototype, {
         let defaultPortionGrams = food.defaultPortionGrams || 100;
         let unitWeightGrams = food.unitWeightGrams > 0 ? Number(food.unitWeightGrams) : null;
         const portionPresets = [...new Set([defaultPortionGrams, 25, 50, 100, 250])].sort((left, right) => left - right);
+        const unitPresets = [1, 2, 3, 4, 5];
         const fmt = value => value != null ? parseFloat(Number(value).toFixed(1)) : '—';
         const isFavorite = this.isFavorite(food.id);
         const estimatedMealType = this.getEstimatedMealType();
@@ -329,12 +330,10 @@ Object.assign(App.prototype, {
                         <input type="number" id="ingredient-portion-amount" value="${unitWeightGrams ? 1 : defaultPortionGrams}" min="0.1" step="0.1" />
                         <select id="ingredient-portion-unit">
                             <option value="g">${this.t('unit_grams')}</option>
-                            <option value="kg">${this.t('unit_kg')}</option>
                             <option value="unit" ${unitWeightGrams ? 'selected' : 'disabled'}>${this.t('unit_singular')}</option>
                         </select>
                     </div>
                     <div class="ingredient-portion-presets">
-                        ${portionPresets.map(portion => `<button type="button" class="btn btn-secondary btn-sm ingredient-portion-preset" data-grams="${portion}">+${fmt(portion)} g</button>`).join('')}
                     </div>
                     <div class="consumption-time-field">
                         <label for="ingredient-consumption-time">${this.t('consumption_time')}</label>
@@ -370,7 +369,14 @@ Object.assign(App.prototype, {
             const amount = parseFloat(amountInput.value);
             if (!Number.isFinite(amount) || amount <= 0) return 0;
             if (unitSelect.value === 'unit') return unitWeightGrams ? amount * unitWeightGrams : 0;
-            return unitSelect.value === 'kg' ? amount * 1000 : amount;
+            return amount;
+        };
+        const renderPortionPresets = () => {
+            const presets = unitSelect.value === 'unit' ? unitPresets : portionPresets;
+            const isUnit = unitSelect.value === 'unit';
+            overlay.querySelector('.ingredient-portion-presets').innerHTML = presets.map(portion =>
+                `<button type="button" class="btn btn-secondary btn-sm ingredient-portion-preset" data-amount="${portion}">${isUnit ? `+ ${fmt(portion)}` : `+${fmt(portion)} g`}</button>`
+            ).join('');
         };
         const scaledNutrient = (value, portionGrams) => value == null ? null : Number(value) * portionGrams / 100;
         const getNutrition = portionGrams => ({
@@ -399,9 +405,10 @@ Object.assign(App.prototype, {
             if (unitSelect.value === 'unit') {
                 amountInput.value = 1;
             } else if (previousUnit === 'unit') {
-                amountInput.value = unitSelect.value === 'kg' ? defaultPortionGrams / 1000 : defaultPortionGrams;
+                amountInput.value = defaultPortionGrams;
             }
             previousUnit = unitSelect.value;
+            renderPortionPresets();
             updateNutritionTable();
         });
         overlay.querySelector('.ingredient-save-weights').addEventListener('click', async event => {
@@ -440,15 +447,14 @@ Object.assign(App.prototype, {
                 saveButton.disabled = false;
             }
         });
-        overlay.querySelectorAll('.ingredient-portion-preset').forEach(button => {
-            button.addEventListener('click', () => {
-                const currentGrams = getPortionGrams();
-                amountInput.value = parseFloat((currentGrams + Number(button.dataset.grams)).toFixed(1));
-                unitSelect.value = 'g';
-                previousUnit = 'g';
-                updateNutritionTable();
-            });
+        overlay.querySelector('.ingredient-portion-presets').addEventListener('click', event => {
+            const button = event.target.closest('.ingredient-portion-preset');
+            if (!button) return;
+            const currentAmount = Number(amountInput.value) || 0;
+            amountInput.value = parseFloat((currentAmount + Number(button.dataset.amount)).toFixed(1));
+            updateNutritionTable();
         });
+        renderPortionPresets();
         updateNutritionTable();
 
         const favoriteButton = overlay.querySelector('#btn-ingredient-favorite');
