@@ -7,6 +7,65 @@ const _ingredientsCache = {
     clear() { this.categories = null; this.browse = {}; this.allItems = null; }
 };
 
+const escapeIngredientHtml = value => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+
+const ingredientNumber = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+
+const updateIngredientReferences = (food, lang) => {
+    const updateItems = items => items?.forEach(item => {
+        if (item.id === food.id) Object.assign(item, food);
+    });
+    updateItems(_ingredientsCache.allItems);
+    Object.values(_ingredientsCache.browse).forEach(entry => updateItems(entry.data));
+
+    document.querySelectorAll('.ingredient-card').forEach(card => {
+        const cardFood = JSON.parse(decodeURIComponent(card.dataset.foodJson));
+        if (cardFood.id !== food.id) return;
+
+        card.dataset.foodJson = encodeURIComponent(JSON.stringify({ ...cardFood, ...food }));
+        const name = lang === 'fi' ? (food.nameFi || food.nameEn) : (food.nameEn || food.nameFi);
+        const secondary = lang === 'fi' ? food.nameEn : food.nameFi;
+        card.querySelector('.ingredient-name').textContent = name;
+
+        let secondaryElement = card.querySelector('.ingredient-secondary');
+        if (secondary && secondary !== name) {
+            if (!secondaryElement) {
+                secondaryElement = document.createElement('div');
+                secondaryElement.className = 'ingredient-secondary';
+                card.querySelector('.ingredient-card-header').after(secondaryElement);
+            }
+            secondaryElement.textContent = secondary;
+        } else {
+            secondaryElement?.remove();
+        }
+
+        let categoryElement = card.querySelector('.ingredient-category');
+        if (food.category) {
+            if (!categoryElement) {
+                categoryElement = document.createElement('div');
+                categoryElement.className = 'ingredient-category';
+                (secondaryElement || card.querySelector('.ingredient-card-header')).after(categoryElement);
+            }
+            categoryElement.textContent = food.category;
+        } else {
+            categoryElement?.remove();
+        }
+
+        const macros = card.querySelectorAll('.ingredient-macros span');
+        if (macros.length === 4) {
+            macros[0].textContent = `${Math.round(ingredientNumber(food.energyKcal))} kcal`;
+            macros[1].textContent = `P ${parseFloat(ingredientNumber(food.protein).toFixed(1))} g`;
+            macros[2].textContent = `F ${parseFloat(ingredientNumber(food.fat).toFixed(1))} g`;
+            macros[3].textContent = `C ${parseFloat(ingredientNumber(food.carbohydrate).toFixed(1))} g`;
+        }
+    });
+};
+
 Object.assign(App.prototype, {
     async setupIngredients() {
         const listEl = document.getElementById('ingredients-list');
@@ -60,20 +119,20 @@ Object.assign(App.prototype, {
                 const secondary = lang === 'fi' ? f.nameEn : f.nameFi;
                 const isFavorite = favoriteIds.has(f.id);
                 return `
-                    <div class="ingredient-card" data-food-json="${encodeURIComponent(JSON.stringify(f))}">
+                    <div class="ingredient-card" role="button" tabindex="0" data-food-json="${encodeURIComponent(JSON.stringify(f))}">
                         <div class="ingredient-card-header">
-                            <div class="ingredient-name">${name}</div>
+                            <div class="ingredient-name">${escapeIngredientHtml(name)}</div>
                             <button class="btn-favorite ingredient-result-favorite ${isFavorite ? 'active' : ''}"
                                     type="button" title="${this.t('toggle_favorite')}"
                                     aria-label="${this.t('toggle_favorite')}">${isFavorite ? '★' : '☆'}</button>
                         </div>
-                        ${secondary && secondary !== name ? `<div class="ingredient-secondary">${secondary}</div>` : ''}
-                        ${f.category ? `<div class="ingredient-category">${f.category}</div>` : ''}
+                        ${secondary && secondary !== name ? `<div class="ingredient-secondary">${escapeIngredientHtml(secondary)}</div>` : ''}
+                        ${f.category ? `<div class="ingredient-category">${escapeIngredientHtml(f.category)}</div>` : ''}
                         <div class="ingredient-macros">
-                            <span>${Math.round(f.energyKcal)} kcal</span>
-                            <span>P ${parseFloat(f.protein.toFixed(1))} g</span>
-                            <span>F ${parseFloat(f.fat.toFixed(1))} g</span>
-                            <span>C ${parseFloat(f.carbohydrate.toFixed(1))} g</span>
+                            <span>${Math.round(ingredientNumber(f.energyKcal))} kcal</span>
+                            <span>P ${parseFloat(ingredientNumber(f.protein).toFixed(1))} g</span>
+                            <span>F ${parseFloat(ingredientNumber(f.fat).toFixed(1))} g</span>
+                            <span>C ${parseFloat(ingredientNumber(f.carbohydrate).toFixed(1))} g</span>
                         </div>
                     </div>`;
             }).join('');
@@ -88,6 +147,11 @@ Object.assign(App.prototype, {
                 card.addEventListener('click', () => {
                     const food = JSON.parse(decodeURIComponent(card.dataset.foodJson));
                     this.showIngredientDetail(food, lang);
+                });
+                card.addEventListener('keydown', event => {
+                    if (event.target !== card || (event.key !== 'Enter' && event.key !== ' ')) return;
+                    event.preventDefault();
+                    card.click();
                 });
             });
             listEl.querySelectorAll('.ingredient-result-favorite').forEach(button => {
@@ -207,6 +271,10 @@ Object.assign(App.prototype, {
             });
         });
 
+        listEl.refreshIngredients = () => {
+            favoriteFoodsPromise = null;
+            return loadItems(categorySelect?.value);
+        };
         await loadItems('');
     },
 
@@ -223,14 +291,15 @@ Object.assign(App.prototype, {
         const overlay = document.createElement('div');
         overlay.className = 'portion-dialog';
         overlay.innerHTML = `
-            <div class="portion-content ingredient-detail">
+            <div class="portion-content ingredient-detail" role="dialog" aria-modal="true" aria-labelledby="ingredient-detail-title">
                 <div class="portion-header">
-                    <h3>${name}</h3>
+                    <h3 id="ingredient-detail-title">${escapeIngredientHtml(name)}</h3>
+                    ${food.isUserCreated ? `<button class="btn btn-secondary btn-sm ingredient-edit-btn" type="button">${this.t('btn_edit')}</button>` : ''}
                     <button class="btn-favorite ${isFavorite ? 'active' : ''}" id="btn-ingredient-favorite"
                             title="${this.t('toggle_favorite')}" aria-label="${this.t('toggle_favorite')}">${isFavorite ? '★' : '☆'}</button>
                 </div>
-                ${secondary && secondary !== name ? `<p class="ingredient-detail-secondary">${secondary}</p>` : ''}
-                ${food.category ? `<p class="ingredient-detail-category">${food.category}</p>` : ''}
+                ${secondary && secondary !== name ? `<p class="ingredient-detail-secondary">${escapeIngredientHtml(secondary)}</p>` : ''}
+                ${food.category ? `<p class="ingredient-detail-category">${escapeIngredientHtml(food.category)}</p>` : ''}
                 <h4 id="ingredient-nutrition-heading"></h4>
                 <table class="nutrient-table">
                     <tr><td>${this.t('energy')}</td><td class="nutrient-value" data-nutrient="energy"></td></tr>
@@ -265,23 +334,32 @@ Object.assign(App.prototype, {
                         </select>
                     </div>
                     <div class="ingredient-portion-presets">
-                        ${portionPresets.map(portion => `<button type="button" class="btn btn-secondary btn-sm ingredient-portion-preset" data-grams="${portion}">${fmt(portion)} g</button>`).join('')}
-                    </div>
-                    <div class="ingredient-meal-buttons">
-                        ${this.getMealTypes().map(mealType => `
-                            <button class="btn btn-primary ingredient-add-btn ${mealType === estimatedMealType ? 'active' : ''}" data-meal="${mealType}">${this.t(`meal_${mealType}`)}</button>
-                        `).join('')}
+                        ${portionPresets.map(portion => `<button type="button" class="btn btn-secondary btn-sm ingredient-portion-preset" data-grams="${portion}">+${fmt(portion)} g</button>`).join('')}
                     </div>
                     <div class="consumption-time-field">
                         <label for="ingredient-consumption-time">${this.t('consumption_time')}</label>
                         <input type="time" id="ingredient-consumption-time" value="${this.getCurrentTimeValue()}" step="60" />
                     </div>
+                    <div class="ingredient-meal-field">
+                        <label for="ingredient-meal-type">${this.t('meal_type_label')}</label>
+                        <select id="ingredient-meal-type">
+                            ${this.getMealTypes().map(mealType => `
+                                <option value="${mealType}" ${mealType === estimatedMealType ? 'selected' : ''}>${this.t(`meal_${mealType}`)}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-primary ingredient-add-btn">${this.t('btn_add')}</button>
                 </div>
                 <button class="btn btn-secondary ingredient-close-btn">${this.t('btn_close')}</button>
             </div>
         `;
         document.body.appendChild(overlay);
         this.dismissOverlayOnClickOutside(overlay);
+
+        overlay.querySelector('.ingredient-edit-btn')?.addEventListener('click', () => {
+            overlay.remove();
+            this.showIngredientEditor(food, lang);
+        });
 
         const amountInput = overlay.querySelector('#ingredient-portion-amount');
         const unitSelect = overlay.querySelector('#ingredient-portion-unit');
@@ -347,17 +425,7 @@ Object.assign(App.prototype, {
                 unitWeightGrams = updatedFood.unitWeightGrams;
                 food.defaultPortionGrams = defaultPortionGrams;
                 food.unitWeightGrams = unitWeightGrams;
-                const updateCachedFood = items => items?.forEach(item => {
-                    if (item.id === food.id) Object.assign(item, food);
-                });
-                updateCachedFood(_ingredientsCache.allItems);
-                Object.values(_ingredientsCache.browse).forEach(entry => updateCachedFood(entry.data));
-                document.querySelectorAll('.ingredient-card').forEach(card => {
-                    const cardFood = JSON.parse(decodeURIComponent(card.dataset.foodJson));
-                    if (cardFood.id === food.id) {
-                        card.dataset.foodJson = encodeURIComponent(JSON.stringify({ ...cardFood, ...food }));
-                    }
-                });
+                updateIngredientReferences(food, lang);
                 unitOption.disabled = !unitWeightGrams;
                 if (!unitWeightGrams && unitSelect.value === 'unit') {
                     unitSelect.value = 'g';
@@ -367,14 +435,15 @@ Object.assign(App.prototype, {
                 updateNutritionTable();
                 this.showToast(this.t('ingredient_weights_saved'));
             } catch {
-                this.showToast(this.t('save_failed'), 'error');
+                this.showToast(this.t('toast_save_failed'), 'error');
             } finally {
                 saveButton.disabled = false;
             }
         });
         overlay.querySelectorAll('.ingredient-portion-preset').forEach(button => {
             button.addEventListener('click', () => {
-                amountInput.value = button.dataset.grams;
+                const currentGrams = getPortionGrams();
+                amountInput.value = parseFloat((currentGrams + Number(button.dataset.grams)).toFixed(1));
                 unitSelect.value = 'g';
                 previousUnit = 'g';
                 updateNutritionTable();
@@ -399,53 +468,215 @@ Object.assign(App.prototype, {
         });
 
         overlay.querySelector('.ingredient-close-btn').addEventListener('click', () => overlay.remove());
-        overlay.querySelectorAll('.ingredient-add-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                const portionGrams = getPortionGrams();
-                if (portionGrams <= 0) return;
-                const mealType = button.dataset.meal;
-                const nutrition = getNutrition(portionGrams);
-                const confirmation = document.createElement('div');
-                confirmation.className = 'portion-dialog ingredient-confirmation';
-                confirmation.innerHTML = `
-                    <div class="portion-content ingredient-confirmation-content">
-                        <h3>${this.t('confirm_ingredient_add')}</h3>
-                        <div class="ingredient-confirmation-summary">
-                            <strong>${name}</strong>
-                            <span>${this.t(`meal_${mealType}`)} · ${overlay.querySelector('#ingredient-consumption-time').value} · ${fmt(portionGrams)} g</span>
-                        </div>
-                        <table class="nutrient-table">
-                            <tr><td>${this.t('energy')}</td><td class="nutrient-value">${Math.round(nutrition.energyKcal || 0)} kcal${nutrition.energyKj ? ` / ${Math.round(nutrition.energyKj)} kJ` : ''}</td></tr>
-                            <tr><td>${this.t('protein_short')}</td><td class="nutrient-value">${fmt(nutrition.protein)} g</td></tr>
-                            <tr><td>${this.t('fat_short')}</td><td class="nutrient-value">${fmt(nutrition.fat)} g</td></tr>
-                            <tr><td>${this.t('carbs_short')}</td><td class="nutrient-value">${fmt(nutrition.carbohydrate)} g</td></tr>
-                        </table>
-                        <div class="portion-buttons">
-                            <button type="button" class="btn btn-secondary ingredient-confirm-cancel">${this.t('btn_cancel')}</button>
-                            <button type="button" class="btn btn-primary ingredient-confirm-add">${this.t('btn_add')}</button>
-                        </div>
-                    </div>`;
-                document.body.appendChild(confirmation);
-                this.dismissOverlayOnClickOutside(confirmation);
-                confirmation.querySelector('.ingredient-confirm-cancel').addEventListener('click', () => confirmation.remove());
-                confirmation.querySelector('.ingredient-confirm-add').addEventListener('click', async () => {
-                    const confirmationButtons = confirmation.querySelectorAll('button');
-                    confirmationButtons.forEach(item => { item.disabled = true; });
-                    try {
-                        const today = new Date().toISOString().split('T')[0];
-                        const consumptionTime = overlay.querySelector('#ingredient-consumption-time').value;
-                        const entry = await API.createEntry({ entryDate: today, mealType, consumptionTime: this.toApiConsumptionTime(consumptionTime) });
-                        await API.addEntryItem(entry.id, { foodItemId: food.id, portionGrams });
-                        this.saveRecentFoods([{ id: food.id, name, calories: nutrition.energyKcal, portion: portionGrams }]);
-                        confirmation.remove();
-                        overlay.remove();
-                        this.showToast(this.t('ingredient_consumption_added'));
-                    } catch (e) {
-                        confirmationButtons.forEach(item => { item.disabled = false; });
-                        this.showToast(this.t('add_failed'), 'error');
-                    }
-                });
+        const consumptionTimeInput = overlay.querySelector('#ingredient-consumption-time');
+        const mealTypeSelect = overlay.querySelector('#ingredient-meal-type');
+        consumptionTimeInput.addEventListener('change', () => {
+            const [hours, minutes] = consumptionTimeInput.value.split(':').map(Number);
+            if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return;
+            const selectedTime = new Date();
+            selectedTime.setHours(hours, minutes, 0, 0);
+            mealTypeSelect.value = this.getEstimatedMealType(selectedTime);
+        });
+        overlay.querySelector('.ingredient-add-btn').addEventListener('click', () => {
+            const portionGrams = getPortionGrams();
+            if (portionGrams <= 0) return;
+            const mealType = mealTypeSelect.value;
+            const nutrition = getNutrition(portionGrams);
+            const confirmation = document.createElement('div');
+            confirmation.className = 'portion-dialog ingredient-confirmation';
+            confirmation.innerHTML = `
+                <div class="portion-content ingredient-confirmation-content">
+                    <h3>${this.t('confirm_ingredient_add')}</h3>
+                    <div class="ingredient-confirmation-summary">
+                        <strong>${escapeIngredientHtml(name)}</strong>
+                        <span>${this.t(`meal_${mealType}`)} · ${consumptionTimeInput.value} · ${fmt(portionGrams)} g</span>
+                    </div>
+                    <table class="nutrient-table">
+                        <tr><td>${this.t('energy')}</td><td class="nutrient-value">${Math.round(nutrition.energyKcal || 0)} kcal${nutrition.energyKj ? ` / ${Math.round(nutrition.energyKj)} kJ` : ''}</td></tr>
+                        <tr><td>${this.t('protein_short')}</td><td class="nutrient-value">${fmt(nutrition.protein)} g</td></tr>
+                        <tr><td>${this.t('fat_short')}</td><td class="nutrient-value">${fmt(nutrition.fat)} g</td></tr>
+                        <tr><td>${this.t('carbs_short')}</td><td class="nutrient-value">${fmt(nutrition.carbohydrate)} g</td></tr>
+                    </table>
+                    <div class="portion-buttons">
+                        <button type="button" class="btn btn-secondary ingredient-confirm-cancel">${this.t('btn_cancel')}</button>
+                        <button type="button" class="btn btn-primary ingredient-confirm-add">${this.t('btn_add')}</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(confirmation);
+            this.dismissOverlayOnClickOutside(confirmation);
+            confirmation.querySelector('.ingredient-confirm-cancel').addEventListener('click', () => confirmation.remove());
+            confirmation.querySelector('.ingredient-confirm-add').addEventListener('click', async () => {
+                const confirmationButtons = confirmation.querySelectorAll('button');
+                confirmationButtons.forEach(item => { item.disabled = true; });
+                try {
+                    const today = new Date().toISOString().split('T')[0];
+                    const entry = await API.createEntry({ entryDate: today, mealType, consumptionTime: this.toApiConsumptionTime(consumptionTimeInput.value) });
+                    await API.addEntryItem(entry.id, { foodItemId: food.id, portionGrams });
+                    this.saveRecentFoods([{ id: food.id, name, calories: nutrition.energyKcal, portion: portionGrams }]);
+                    confirmation.remove();
+                    overlay.remove();
+                    this.showToast(this.t('ingredient_consumption_added'));
+                } catch (e) {
+                    confirmationButtons.forEach(item => { item.disabled = false; });
+                    this.showToast(this.t('add_failed'), 'error');
+                }
             });
+        });
+    },
+
+    async showIngredientEditor(food, lang) {
+        const overlay = document.createElement('div');
+        overlay.className = 'portion-dialog';
+        overlay.innerHTML = `
+            <div class="portion-content ingredient-editor" role="dialog" aria-modal="true" aria-labelledby="ingredient-editor-title">
+                <h3 id="ingredient-editor-title">${this.t('edit_ingredient_title')}</h3>
+                <form class="ingredient-edit-form">
+                    <div class="barcode-name-grid">
+                        <div class="nutrition-input"><label>${this.t('ingredient_name_fi')}</label><input name="nameFi" /></div>
+                        <div class="nutrition-input"><label>${this.t('ingredient_name_en')}</label><input name="nameEn" /></div>
+                    </div>
+                    <div class="nutrition-input ingredient-category-editor">
+                        <label for="ingredient-edit-category">${this.t('ingredient_category')}</label>
+                        <select id="ingredient-edit-category" name="category">
+                            <option value="">${this.t('all_categories')}</option>
+                        </select>
+                    </div>
+                    <div class="ingredient-weight-settings">
+                        <h4>${this.t('ingredient_weights_title')}</h4>
+                        <div class="ingredient-weight-grid">
+                            <label for="ingredient-edit-default-weight">${this.t('default_weight_grams')}</label>
+                            <input id="ingredient-edit-default-weight" type="number" inputmode="decimal" name="defaultPortionGrams" min="0.1" step="0.1" required />
+                            <label for="ingredient-edit-unit-weight">${this.t('unit_weight_grams')}</label>
+                            <input id="ingredient-edit-unit-weight" type="number" inputmode="decimal" name="unitWeightGrams" min="0.1" step="0.1" />
+                        </div>
+                    </div>
+                    <h4>${this.t('per_100g')}</h4>
+                    <div class="manual-nutrition-grid">
+                        <div class="nutrition-input"><label>kcal</label><input type="number" inputmode="decimal" name="energyKcal" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label>kJ</label><input type="number" inputmode="decimal" name="energyKj" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label>${this.t('protein_short')}</label><input type="number" inputmode="decimal" name="protein" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label>${this.t('fat_short')}</label><input type="number" inputmode="decimal" name="fat" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label>${this.t('saturated_fat')}</label><input type="number" inputmode="decimal" name="saturatedFat" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label>${this.t('carbs_short')}</label><input type="number" inputmode="decimal" name="carbohydrate" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label>${this.t('sugar')}</label><input type="number" inputmode="decimal" name="sugar" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label>${this.t('fiber_short')}</label><input type="number" inputmode="decimal" name="fiber" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label>${this.t('salt')}</label><input type="number" inputmode="decimal" name="salt" min="0" step="0.01" /></div>
+                    </div>
+                    <p class="ingredient-edit-status" role="status" aria-live="polite"></p>
+                    <div class="portion-buttons">
+                        <button type="button" class="btn btn-secondary ingredient-edit-cancel">${this.t('btn_cancel')}</button>
+                        <button type="submit" class="btn btn-primary">${this.t('btn_save')}</button>
+                    </div>
+                </form>
+            </div>`;
+        document.body.appendChild(overlay);
+        this.dismissOverlayOnClickOutside(overlay);
+
+        const form = overlay.querySelector('.ingredient-edit-form');
+        const status = overlay.querySelector('.ingredient-edit-status');
+        const values = {
+            nameFi: food.nameFi,
+            nameEn: food.nameEn,
+            defaultPortionGrams: food.defaultPortionGrams || 100,
+            unitWeightGrams: food.unitWeightGrams,
+            energyKcal: food.energyKcal,
+            energyKj: food.energyKj,
+            protein: food.protein,
+            fat: food.fat,
+            saturatedFat: food.saturatedFat,
+            carbohydrate: food.carbohydrate,
+            sugar: food.sugar,
+            fiber: food.fiber,
+            salt: food.salt
+        };
+        Object.entries(values).forEach(([fieldName, value]) => {
+            form.elements[fieldName].value = value ?? '';
+        });
+        form.elements.nameFi.focus();
+
+        const categorySelect = form.elements.category;
+        try {
+            let categories = _ingredientsCache.categories;
+            if (!categories) {
+                categories = await API.getFoodCategories();
+                _ingredientsCache.categories = categories;
+            }
+            const currentCategory = food.category?.trim();
+            if (currentCategory && !categories.includes(currentCategory)) categories = [...categories, currentCategory];
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                categorySelect.appendChild(option);
+            });
+            categorySelect.value = currentCategory || '';
+        } catch {
+            if (food.category) {
+                categorySelect.add(new Option(food.category, food.category));
+                categorySelect.value = food.category;
+            }
+        }
+        this.enhanceSelectWithSearch(categorySelect);
+
+        const closeAndReopen = () => {
+            overlay.remove();
+            this.showIngredientDetail(food, lang);
+        };
+        form.querySelector('.ingredient-edit-cancel').addEventListener('click', closeAndReopen);
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            const nameFi = form.elements.nameFi.value.trim();
+            const nameEn = form.elements.nameEn.value.trim();
+            if (!nameFi && !nameEn) {
+                status.textContent = this.t('ingredient_name_required');
+                status.classList.add('error');
+                return;
+            }
+            if (!form.reportValidity()) return;
+
+            const numberValue = fieldName => {
+                const value = Number(form.elements[fieldName].value);
+                return Number.isFinite(value) && value >= 0 ? value : 0;
+            };
+            const optionalNumberValue = fieldName => form.elements[fieldName].value.trim()
+                ? numberValue(fieldName)
+                : null;
+            const unitWeightText = form.elements.unitWeightGrams.value.trim();
+            const updatedValues = {
+                nameFi: nameFi || nameEn,
+                nameEn: nameEn || nameFi,
+                category: categorySelect.value || null,
+                defaultPortionGrams: numberValue('defaultPortionGrams'),
+                unitWeightGrams: unitWeightText ? numberValue('unitWeightGrams') : null,
+                energyKcal: numberValue('energyKcal'),
+                energyKj: numberValue('energyKj'),
+                protein: numberValue('protein'),
+                fat: numberValue('fat'),
+                saturatedFat: optionalNumberValue('saturatedFat'),
+                carbohydrate: numberValue('carbohydrate'),
+                sugar: optionalNumberValue('sugar'),
+                fiber: optionalNumberValue('fiber'),
+                salt: optionalNumberValue('salt')
+            };
+
+            const saveButton = form.querySelector('button[type="submit"]');
+            saveButton.disabled = true;
+            status.textContent = '';
+            status.classList.remove('error');
+            try {
+                const updatedFood = await API.updateFood(food.id, updatedValues);
+                Object.assign(food, updatedFood);
+                updateIngredientReferences(food, lang);
+                _ingredientsCache.clear();
+                document.getElementById('ingredients-list')?.refreshIngredients?.();
+                this.showToast(this.t('ingredient_saved'));
+                overlay.remove();
+                this.showIngredientDetail(food, lang);
+            } catch {
+                status.textContent = this.t('toast_save_failed');
+                status.classList.add('error');
+                saveButton.disabled = false;
+            }
         });
     }
 });

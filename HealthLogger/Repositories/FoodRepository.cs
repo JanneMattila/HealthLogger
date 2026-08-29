@@ -12,9 +12,9 @@ public class FoodRepository
 
     public FoodRepository(HealthLoggerDbContext db) => _db = db;
 
-    public async Task<List<FoodSearchResult>> SearchAsync(string query, string lang = "fi", int limit = 20, int offset = 0)
+    public async Task<List<FoodSearchResult>> SearchAsync(Guid userId, string query, string lang = "fi", int limit = 20, int offset = 0)
     {
-        var q = _db.FoodItems.AsQueryable();
+        var q = _db.FoodItems.Where(f => f.UserId == null || f.UserId == userId);
 
         // Search both Finnish and English names simultaneously (case-insensitive via EF.Functions.Like)
         q = q.Where(f => EF.Functions.Like(f.NameFi, $"%{query}%") || 
@@ -45,15 +45,51 @@ public class FoodRepository
         return await _db.FoodItems.FirstOrDefaultAsync(f => f.Id == id);
     }
 
-    public async Task<FoodItemEntity?> UpdateWeightsAsync(Guid id, double defaultPortionGrams, double? unitWeightGrams)
+    public async Task<FoodItemEntity?> GetAccessibleByIdAsync(Guid userId, Guid id)
     {
-        var food = await GetByIdAsync(id);
+        return await _db.FoodItems.FirstOrDefaultAsync(f =>
+            f.Id == id && (f.UserId == null || f.UserId == userId));
+    }
+
+    public async Task<FoodItemEntity?> UpdateWeightsAsync(Guid userId, Guid id, double defaultPortionGrams, double? unitWeightGrams)
+    {
+        var food = await _db.FoodItems.AsTracking().FirstOrDefaultAsync(f =>
+            f.Id == id && (f.UserId == null || f.UserId == userId));
         if (food is null)
             return null;
 
         food.DefaultPortionGrams = defaultPortionGrams;
         food.UnitWeightGrams = unitWeightGrams;
         food.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return food;
+    }
+
+    public async Task<FoodItemEntity?> UpdateCustomFoodAsync(Guid userId, Guid foodId, FoodItemEntity update)
+    {
+        var food = await _db.FoodItems.AsTracking().FirstOrDefaultAsync(existing =>
+            existing.Id == foodId && existing.IsUserCreated && existing.UserId == userId);
+        if (food is null)
+            return null;
+
+        food.NameFi = update.NameFi;
+        food.NameEn = update.NameEn;
+        food.Category = update.Category;
+        food.DefaultPortionGrams = update.DefaultPortionGrams;
+        food.UnitWeightGrams = update.UnitWeightGrams;
+        food.EnergyKcal = update.EnergyKcal;
+        food.EnergyKj = update.EnergyKj > 0
+            ? update.EnergyKj
+            : NutritionCalculator.CalculateKilojoules(update.EnergyKcal);
+        food.Protein = update.Protein;
+        food.Fat = update.Fat;
+        food.SaturatedFat = update.SaturatedFat;
+        food.Carbohydrate = update.Carbohydrate;
+        food.Sugar = update.Sugar;
+        food.Fiber = update.Fiber;
+        food.Salt = update.Salt;
+        food.UpdatedAt = DateTime.UtcNow;
+
         await _db.SaveChangesAsync();
         return food;
     }
@@ -83,9 +119,9 @@ public class FoodRepository
         await _db.SaveChangesAsync();
     }
 
-    public async Task<List<FoodItemEntity>> BrowseAsync(string? category, string lang = "en", int limit = 50, int offset = 0)
+    public async Task<List<FoodItemEntity>> BrowseAsync(Guid userId, string? category, string lang = "en", int limit = 50, int offset = 0)
     {
-        var q = _db.FoodItems.AsQueryable();
+        var q = _db.FoodItems.Where(f => f.UserId == null || f.UserId == userId);
         if (!string.IsNullOrWhiteSpace(category))
             q = q.Where(f => f.Category == category);
         return await q
@@ -107,7 +143,8 @@ public class FoodRepository
 
     public async Task<FoodItemEntity?> GetByFineliIdAsync(int fineliId)
     {
-        return await _db.FoodItems.FirstOrDefaultAsync(f => f.FineliId == fineliId);
+        return await _db.FoodItems.FirstOrDefaultAsync(f =>
+            f.FineliId == fineliId && !f.IsUserCreated && f.UserId == null);
     }
 
     public async Task<FoodItemEntity> CreateCustomFoodAsync(FoodItemEntity food)
@@ -125,6 +162,7 @@ public class FoodRepository
         }
 
         food.Id = Guid.NewGuid();
+        food.FineliId = null;
         food.IsUserCreated = true;
         food.CreatedAt = DateTime.UtcNow;
         _db.FoodItems.Add(food);

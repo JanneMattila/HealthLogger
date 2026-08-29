@@ -44,6 +44,7 @@ const API = {
     getFoodByFineliId: (fineliId) => API.request('GET', `/api/foods/fineli/${fineliId}`),
     lookupBarcode: (barcode) => API.request('GET', `/api/foods/barcode/${encodeURIComponent(barcode)}`),
     createFood: (food) => API.request('POST', '/api/foods', food),
+    updateFood: (id, food) => API.request('PUT', `/api/foods/${id}`, food),
     updateFoodWeights: (id, weights) => API.request('PATCH', `/api/foods/${id}/weights`, weights),
 
     // Entries

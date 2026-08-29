@@ -566,12 +566,20 @@ input[type="date"], input[type="time"] {
 .ingredient-amount-row select { min-width: 5rem; }
 .ingredient-portion-presets { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
 .ingredient-portion-presets .btn { padding: 0.4rem 0.7rem; }
-.ingredient-meal-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.75rem; }
-.ingredient-meal-buttons .btn { width: 100%; }
+.ingredient-meal-field { margin-bottom: 0.75rem; }
+.ingredient-meal-field select { width: 100%; }
+.ingredient-consumption > .ingredient-add-btn { width: 100%; margin-bottom: 0.75rem; }
 .ingredient-close-btn { width: 100%; }
 .ingredient-confirmation { z-index: 1100; }
 .ingredient-confirmation-summary { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; }
 .ingredient-confirmation-summary span { color: var(--text-secondary); font-size: 0.9rem; }
+.ingredient-editor h4 { margin: 1rem 0 0.5rem; font-size: 0.85rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+.ingredient-editor .ingredient-weight-settings { margin-bottom: 1rem; }
+.ingredient-category-editor { margin-bottom: 0.5rem; }
+.ingredient-category-editor select { width: 100%; }
+.ingredient-edit-status { min-height: 1.25rem; margin: 0.75rem 0; color: var(--text-secondary); }
+.ingredient-edit-status.error { color: var(--danger); }
+.ingredient-editor .portion-buttons .btn { flex: 1; }
 .recipe-ingredient-nutrition { margin-top: 0.5rem; }
 .recipe-ingredient-nutrition h4 { margin: 0 0 0.5rem; }
 .recipe-ingredient-dialog { max-width: 560px; }
