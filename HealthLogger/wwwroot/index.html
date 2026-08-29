@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Health Logger</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/css/styles.css?v=20260814151750" />
+    <meta name="theme-color" content="#2d7a4f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+</head>
+<body>
+    <div id="app">
+        <!-- Welcome Dialog -->
+        <div id="welcome-dialog" class="dialog-overlay" style="display: none;">
+            <div class="dialog">
+                <h1 data-i18n="welcome_title">Health Logger</h1>
+                <p data-i18n="welcome_subtitle">Track your calorie intake and wellness</p>
+                <div class="dialog-buttons">
+                    <button id="btn-microsoft-login" class="btn btn-primary" data-i18n="btn_microsoft_login">Sign in with Microsoft</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <header id="app-header" style="display: none;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button class="nav-toggle" id="nav-toggle">☰</button>
+                <img src="/images/favicon-32x32.png" alt="" style="width: 28px; height: 28px;" />
+                <h1 id="app-title" style="cursor: pointer;">Health Logger</h1>
+            </div>
+        </header>
+
+        <div class="app-container">
+            <div id="nav-overlay" class="nav-overlay hidden"></div>
+            <nav id="left-nav" class="left-nav collapsed">
+                <ul class="nav-menu">
+                    <li class="nav-item active" data-page="dashboard" data-i18n="nav_dashboard">🏠 Dashboard</li>
+                    <li class="nav-item" data-page="log-meal" data-i18n="nav_log_meal">🍴 Today</li>
+                    <li class="nav-item" data-page="drinks" data-i18n="nav_drinks">🥤 Drinks</li>
+                    <li class="nav-item" data-page="recipes" data-i18n="nav_recipes">🥪 Recipes</li>
+        <li class="nav-item" data-page="ingredients" data-i18n="nav_ingredients">🥦 Ingredients</li>
+                    <li class="nav-item" data-page="checkin" data-i18n="nav_checkin">💤 Check-in</li>
+                    <li class="nav-item" data-page="metrics" data-i18n="nav_metrics">⚖️ Metrics</li>
+                    <li class="nav-item" data-page="stats" data-i18n="nav_stats">📈 Stats</li>
+                    <li class="nav-item" data-page="preferences" data-i18n="nav_preferences">⚙️ Preferences</li>
+                </ul>
+            </nav>
+
+            <!-- Main Content Area -->
+            <main id="content" style="display: none;"></main>
+        </div>
+    </div>
+
+    <!-- Templates -->
+    <template id="tmpl-dashboard">
+        <div class="page dashboard">
+            <h2 data-i18n="page_dashboard">📊 Dashboard</h2>
+            <div class="calorie-summary">
+                <div class="calorie-ring">
+                    <div class="calorie-value" id="calories-today">0</div>
+                    <div class="calorie-label" data-i18n="kcal">kcal</div>
+                </div>
+                <div class="calorie-target" id="calorie-target-info"></div>
+            </div>
+            <div class="macro-bars" id="macro-bars"></div>
+            <div class="drink-dashboard-summary" id="drink-dashboard-summary"></div>
+            <div class="water-intake-tile" id="water-intake-tile"></div>
+            <div class="coffee-intake-tile" id="coffee-intake-tile"></div>
+            <div id="other-drink-intake-tiles"></div>
+            <div class="quick-actions">
+                <button class="btn btn-primary" data-action="quick-meal" data-i18n="btn_add_meal">🍴 Add meal</button>
+                <button class="btn btn-secondary" data-action="quick-drink" data-i18n="btn_add_drink">🥤 Add drink</button>
+                <button class="btn btn-secondary" data-action="quick-checkin" data-i18n="btn_daily_checkin">💤 Daily check-in</button>
+                <button class="btn btn-secondary" data-action="quick-photo" data-i18n="btn_identify_food">📸 Identify food</button>
+            </div>
+            <div class="weekly-trend" id="weekly-trend">
+                <h3 data-i18n="weekly_calories">Weekly calories</h3>
+                <canvas id="chart-weekly-calories" width="400" height="200"></canvas>
+            </div>
+            <div class="wellness-summary" id="wellness-summary"></div>
+        </div>
+    </template>
+
+    <template id="tmpl-log-meal">
+        <div class="page log-meal">
+            <h2 data-i18n="page_log_meal">🍴 Today</h2>
+            <section class="today-meal-overview">
+                <h3 data-i18n="today_nutrition">Today's nutrition</h3>
+                <div class="meal-today-stats" id="meal-today-stats"></div>
+                <h3 data-i18n="today_meals">Today's meals</h3>
+                <div id="today-meals"></div>
+            </section>
+            <h3 class="meal-add-heading" data-i18n="btn_add_meal">🍴 Add meal</h3>
+            <div class="meal-type-selector">
+                <button class="meal-type active" data-meal="breakfast" data-i18n="meal_breakfast">Breakfast</button>
+                <button class="meal-type" data-meal="lunch" data-i18n="meal_lunch">Lunch</button>
+                <button class="meal-type" data-meal="snack" data-i18n="meal_snack">Snack</button>
+                <button class="meal-type" data-meal="dinner" data-i18n="meal_dinner">Dinner</button>
+                <button class="meal-type" data-meal="supper" data-i18n="meal_supper">Supper</button>
+            </div>
+            <div class="consumption-time-field">
+                <label for="meal-consumption-time" data-i18n="consumption_time">Time</label>
+                <input type="time" id="meal-consumption-time" step="60" />
+            </div>
+            <div class="food-search">
+                <input type="text" id="food-search-input" data-i18n-placeholder="food_search_placeholder" placeholder="Search food..." />
+                <button id="btn-barcode-meal" class="btn btn-icon" data-i18n-title="barcode_title" title="Scan barcode">▥</button>
+                <button id="btn-camera" class="btn btn-icon">📸</button>
+            </div>
+            <div id="search-results" class="search-results"></div>
+            <div id="meal-items" class="meal-items">
+                <h3 id="meal-items-title" data-i18n="meal_items_title">Meal items</h3>
+                <div id="meal-items-list"></div>
+                <div class="meal-total" id="meal-total"></div>
+            </div>
+            <button id="btn-save-meal" class="btn btn-primary" style="display:none;" data-i18n="btn_save">Save</button>
+            <div class="nutrient-drilldowns" id="nutrient-drilldowns"></div>
+        </div>
+    </template>
+
+    <template id="tmpl-recipes">
+        <div class="page recipes">
+            <h2 data-i18n="page_recipes">🥪 Recipes</h2>
+            <div id="recipe-list-view">
+                <button id="btn-new-recipe" class="btn btn-primary" data-i18n="btn_new_recipe">➕ New Recipe</button>
+                <div id="recipe-list" class="recipe-list"></div>
+            </div>
+            <div id="recipe-create-view" style="display:none;">
+                <h3 id="recipe-form-title" data-i18n="create_recipe_title">Create Recipe</h3>
+                <form id="recipe-form">
+                    <div class="recipe-field">
+                        <label data-i18n="label_name">Name</label>
+                        <input type="text" name="name" required data-i18n-placeholder="recipe_name_placeholder" placeholder="Recipe name" />
+                    </div>
+                    <div class="recipe-field">
+                        <label data-i18n="label_description">Description</label>
+                        <textarea name="description" rows="2" data-i18n-placeholder="optional_placeholder" placeholder="Optional"></textarea>
+                    </div>
+                    <div class="recipe-field">
+                        <label data-i18n="ingredients">Ingredients</label>
+                        <div class="food-search">
+                            <input type="text" id="recipe-food-search" data-i18n-placeholder="food_search_placeholder" placeholder="Search food..." />
+                            <button type="button" id="btn-barcode-recipe" class="btn btn-secondary btn-barcode" data-i18n="barcode_scan_button" data-i18n-title="barcode_title" title="Scan barcode">Scan EAN</button>
+                        </div>
+                        <div id="recipe-search-results" class="search-results"></div>
+                        <div id="recipe-ingredients-list" class="meal-items"></div>
+                    </div>
+                    <div class="recipe-field">
+                        <label data-i18n="manual_nutrition_label">Or enter nutrition manually</label>
+                        <div class="online-search-row">
+                            <input type="text" id="online-nutrition-search" data-i18n-placeholder="search_online_placeholder" placeholder="Search online (e.g., Texas Monster Kotipizza)..." />
+                            <button type="button" id="btn-search-online" class="btn btn-secondary btn-sm" data-i18n="search_online">🔍 Search online</button>
+                        </div>
+                        <div id="online-search-status" style="display:none; margin-bottom: 0.5rem;"></div>
+                        <div class="nutrition-mode-selector">
+                            <button type="button" class="nutrition-mode active" data-mode="per100g" data-i18n="per_100g">Per 100 g</button>
+                            <button type="button" class="nutrition-mode" data-mode="perProduct" data-i18n="per_product">Per product</button>
+                        </div>
+                        <div id="product-weight-row" class="nutrition-input" style="display:none; margin-bottom: 0.5rem;">
+                            <label data-i18n="product_total_weight">Total product weight (g)</label>
+                            <input type="number" name="productWeightG" min="1" step="1" />
+                        </div>
+                        <div class="manual-nutrition-grid">
+                            <div class="nutrition-input">
+                                <label>kcal</label>
+                                <input type="number" name="customCalories" min="0" step="0.01" />
+                            </div>
+                            <div class="nutrition-input">
+                                <label>kJ</label>
+                                <input type="number" name="customCaloriesKj" min="0" step="0.01" />
+                            </div>
+                            <div class="nutrition-input">
+                                <label data-i18n="fat_short">Fat</label>
+                                <input type="number" name="customFat" min="0" step="0.01" />
+                            </div>
+                            <div class="nutrition-input">
+                                <label data-i18n="saturated_fat">Saturated</label>
+                                <input type="number" name="customSaturatedFat" min="0" step="0.01" />
+                            </div>
+                            <div class="nutrition-input">
+                                <label data-i18n="carbs_short">Carbs</label>
+                                <input type="number" name="customCarbohydrate" min="0" step="0.01" />
+                            </div>
+                            <div class="nutrition-input">
+                                <label data-i18n="sugar">Sugar</label>
+                                <input type="number" name="customSugar" min="0" step="0.01" />
+                            </div>
+                            <div class="nutrition-input">
+                                <label data-i18n="protein_short">Protein</label>
+                                <input type="number" name="customProtein" min="0" step="0.01" />
+                            </div>
+                            <div class="nutrition-input">
+                                <label data-i18n="salt">Salt</label>
+                                <input type="number" name="customSalt" min="0" step="0.01" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="recipe-actions">
+                        <button type="button" id="btn-recipe-cancel" class="btn btn-secondary" data-i18n="btn_cancel">Cancel</button>
+                        <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+                    </div>
+                </form>
+            </div>
+            <div id="recipe-detail-view" style="display:none;">
+                <button id="btn-recipe-back" class="btn btn-secondary" data-i18n="btn_back">← Back</button>
+                <div id="recipe-detail-content"></div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-ingredients">
+        <div class="page ingredients">
+            <h2 data-i18n="page_ingredients">🥦 Ingredients</h2>
+            <div class="food-search" style="margin-bottom: 1rem;">
+                <input type="text" id="ingredients-search" data-i18n-placeholder="food_search_placeholder" placeholder="Search food..." />
+                <button id="btn-barcode-ingredient" class="btn btn-secondary btn-barcode" data-i18n="barcode_scan_button" data-i18n-title="barcode_title" title="Scan barcode">Scan EAN</button>
+            </div>
+            <div class="ingredients-filter">
+                <select id="ingredients-category">
+                    <option value="" data-i18n="all_categories">All categories</option>
+                </select>
+            </div>
+            <div id="ingredients-list" class="ingredients-list"></div>
+        </div>
+    </template>
+
+    <template id="tmpl-drinks">
+        <div class="page drinks">
+            <h2 data-i18n="page_drinks">🥤 Drinks</h2>
+            <div class="drink-summary" id="drink-summary">
+                <div class="drink-total-ring">
+                    <div class="drink-total-value" id="drink-total-ml">0</div>
+                    <div class="drink-total-label">ml</div>
+                </div>
+            </div>
+            <div class="drink-quick-buttons" id="drink-quick-buttons">
+                <button class="btn btn-primary drink-quick-btn" id="btn-quick-water" data-i18n="btn_quick_water">💧 Water</button>
+                <button class="btn btn-secondary drink-quick-btn" id="btn-quick-coffee" data-i18n="btn_quick_coffee">☕ Coffee</button>
+                <button class="btn btn-secondary drink-quick-btn" id="btn-quick-beer" data-i18n="btn_quick_beer">🍺 Beer</button>
+                <button class="btn btn-secondary drink-quick-btn" id="btn-quick-soft-drink-sugar" data-i18n="btn_quick_soft_drink_sugar">🥤 Soft drinks (sugar)</button>
+                <button class="btn btn-secondary drink-quick-btn" id="btn-quick-soft-drink-no-sugar" data-i18n="btn_quick_soft_drink_no_sugar">🥤 Soft drinks (no sugar)</button>
+                <button class="btn btn-secondary drink-quick-btn" id="btn-quick-spirit" data-i18n="btn_quick_spirit">🥃 Drink (alcohol 4 cl)</button>
+                <button class="btn btn-secondary drink-quick-btn" id="btn-add-custom-drink" data-i18n="btn_custom_drink">🥤 Other drink</button>
+            </div>
+            <div class="drink-favorites" id="drink-favorites"></div>
+            <div class="drink-log" id="drink-log">
+                <h3 data-i18n="drink_log_title">Today's drinks</h3>
+                <div id="drink-log-list"></div>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-checkin">
+        <div class="page checkin">
+            <h2 data-i18n="page_checkin">💤 Daily Check-in</h2>
+            <form id="checkin-form">
+                <div class="checkin-group">
+                    <label data-i18n="label_sleep_quality">😴 Sleep quality (1-5)</label>
+                    <div class="rating-buttons" data-field="sleepQuality">
+                        <button type="button" data-value="1" data-rating-label="rating_sleep_1">1</button>
+                        <button type="button" data-value="2" data-rating-label="rating_sleep_2">2</button>
+                        <button type="button" data-value="3" data-rating-label="rating_sleep_3">3</button>
+                        <button type="button" data-value="4" data-rating-label="rating_sleep_4">4</button>
+                        <button type="button" data-value="5" data-rating-label="rating_sleep_5">5</button>
+                    </div>
+                    <div class="rating-scale-labels"><span data-i18n="rating_sleep_1">Very poor</span><span data-i18n="rating_sleep_5">Excellent</span></div>
+                    <div class="rating-selection" data-rating-description="sleepQuality" aria-live="polite"></div>
+                </div>
+                <div class="checkin-group">
+                    <label data-i18n="label_sleep_hours">⏰ Sleep hours</label>
+                    <input type="number" name="sleepHours" step="0.5" min="0" max="24" />
+                </div>
+                <div class="checkin-group">
+                    <label data-i18n="label_mood">😊 Mood (1-5)</label>
+                    <div class="rating-buttons" data-field="moodRating">
+                        <button type="button" data-value="1" data-rating-label="rating_mood_1">1</button>
+                        <button type="button" data-value="2" data-rating-label="rating_mood_2">2</button>
+                        <button type="button" data-value="3" data-rating-label="rating_mood_3">3</button>
+                        <button type="button" data-value="4" data-rating-label="rating_mood_4">4</button>
+                        <button type="button" data-value="5" data-rating-label="rating_mood_5">5</button>
+                    </div>
+                    <div class="rating-scale-labels"><span data-i18n="rating_mood_1">Very low</span><span data-i18n="rating_mood_5">Excellent</span></div>
+                    <div class="rating-selection" data-rating-description="moodRating" aria-live="polite"></div>
+                </div>
+                <div class="checkin-group">
+                    <label data-i18n="label_energy">⚡ Energy level (1-5)</label>
+                    <div class="rating-buttons" data-field="energyLevel">
+                        <button type="button" data-value="1" data-rating-label="rating_energy_1">1</button>
+                        <button type="button" data-value="2" data-rating-label="rating_energy_2">2</button>
+                        <button type="button" data-value="3" data-rating-label="rating_energy_3">3</button>
+                        <button type="button" data-value="4" data-rating-label="rating_energy_4">4</button>
+                        <button type="button" data-value="5" data-rating-label="rating_energy_5">5</button>
+                    </div>
+                    <div class="rating-scale-labels"><span data-i18n="rating_energy_1">Exhausted</span><span data-i18n="rating_energy_5">Very energetic</span></div>
+                    <div class="rating-selection" data-rating-description="energyLevel" aria-live="polite"></div>
+                </div>
+                <div class="checkin-group">
+                    <label data-i18n="label_stress">😰 Stress (1-5)</label>
+                    <div class="rating-buttons" data-field="stressLevel">
+                        <button type="button" data-value="1" data-rating-label="rating_stress_1">1</button>
+                        <button type="button" data-value="2" data-rating-label="rating_stress_2">2</button>
+                        <button type="button" data-value="3" data-rating-label="rating_stress_3">3</button>
+                        <button type="button" data-value="4" data-rating-label="rating_stress_4">4</button>
+                        <button type="button" data-value="5" data-rating-label="rating_stress_5">5</button>
+                    </div>
+                    <div class="rating-scale-labels"><span data-i18n="rating_stress_1">Extreme</span><span data-i18n="rating_stress_5">No stress</span></div>
+                    <div class="rating-selection" data-rating-description="stressLevel" aria-live="polite"></div>
+                </div>
+                <div class="checkin-group">
+                    <label data-i18n="label_notes">📝 Notes</label>
+                    <textarea name="notes" rows="2"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+            </form>
+        </div>
+    </template>
+
+    <template id="tmpl-metrics">
+        <div class="page metrics">
+            <h2 data-i18n="page_metrics">⚖️ Body Metrics</h2>
+            <div id="latest-metrics" class="latest-metrics"></div>
+            <form id="metrics-form">
+                <div class="metrics-group">
+                    <label data-i18n="label_weight">⚖️ Weight (kg)</label>
+                    <input type="number" name="weightKg" step="0.1" min="0" />
+                    <span class="field-hint" id="hint-weight"></span>
+                </div>
+                <div class="metrics-group">
+                    <label data-i18n="label_waist">📏 Waist circumference (cm)</label>
+                    <input type="number" name="waistCircumferenceCm" step="0.5" min="0" />
+                    <span class="field-hint" id="hint-waist"></span>
+                </div>
+                <div class="metrics-group">
+                    <label data-i18n="label_blood_pressure">❤️ Blood pressure</label>
+                    <div class="bp-inputs">
+                        <input type="number" name="systolicBP" data-i18n-placeholder="label_systolic" placeholder="Systolic" min="0" />
+                        <span>/</span>
+                        <input type="number" name="diastolicBP" data-i18n-placeholder="label_diastolic" placeholder="Diastolic" min="0" />
+                    </div>
+                    <span class="field-hint" id="hint-bp"></span>
+                </div>
+                <div class="metrics-group">
+                    <label data-i18n="label_notes">📝 Notes</label>
+                    <textarea name="notes" rows="2"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+            </form>
+            <div class="metrics-history">
+                <h3 data-i18n="trends_title">Trends</h3>
+                <canvas id="chart-weight" width="400" height="200"></canvas>
+                <canvas id="chart-waist" width="400" height="200"></canvas>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-stats">
+        <div class="page stats">
+            <h2 data-i18n="page_stats">📈 Statistics</h2>
+            <div class="stats-period">
+                <button class="period-btn active" data-days="7" data-i18n="period_7d">7 days</button>
+                <button class="period-btn" data-days="30" data-i18n="period_30d">30 days</button>
+                <button class="period-btn" data-days="90" data-i18n="period_90d">90 days</button>
+            </div>
+            <div class="stats-summary" id="stats-summary"></div>
+            <div class="chart-container">
+                <h3 data-i18n="chart_calories">Calories</h3>
+                <canvas id="chart-calories" width="400" height="200"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3 data-i18n="chart_macros">Macro Distribution</h3>
+                <canvas id="chart-macro-dist" width="300" height="300"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3 data-i18n="chart_wellness">Wellness</h3>
+                <canvas id="chart-wellness" width="400" height="200"></canvas>
+            </div>
+            <div class="correlation-insights" id="correlation-insights"></div>
+        </div>
+    </template>
+
+    <template id="tmpl-preferences">
+        <div class="page preferences">
+            <h2 data-i18n="page_preferences">⚙️ Preferences</h2>
+            <form id="preferences-form">
+                <div class="pref-group">
+                    <label data-i18n="label_language">🌐 Language</label>
+                    <select name="language">
+                        <option value="fi" data-i18n="lang_fi">Suomi</option>
+                        <option value="en" data-i18n="lang_en">English</option>
+                    </select>
+                </div>
+                <div class="pref-group">
+                    <label data-i18n="label_theme">🎨 Theme</label>
+                    <select name="theme">
+                        <option value="auto" data-i18n="theme_auto">Auto</option>
+                        <option value="light" data-i18n="theme_light">Light</option>
+                        <option value="dark" data-i18n="theme_dark">Dark</option>
+                    </select>
+                </div>
+                <div class="pref-group">
+                    <label data-i18n="label_calorie_target">🎯 Daily calorie target</label>
+                    <input type="number" name="dailyCalorieTarget" min="500" max="10000" />
+                </div>
+                <div class="pref-group">
+                    <label data-i18n="label_unit_system">📐 Unit system</label>
+                    <select name="unitSystem">
+                        <option value="metric" data-i18n="unit_metric">Metric (kg, cm)</option>
+                        <option value="imperial" data-i18n="unit_imperial">Imperial (lb, in)</option>
+                    </select>
+                </div>
+                <h3 data-i18n="ingredient_categories_section">Ingredient categories</h3>
+                <div class="pref-group">
+                    <div id="ingredient-categories-list" class="reminder-list"></div>
+                    <div class="reminder-add-row">
+                        <input type="text" id="new-ingredient-category" maxlength="80" data-i18n-placeholder="ingredient_category_placeholder" placeholder="New category" />
+                        <button type="button" id="btn-add-ingredient-category" class="btn btn-secondary btn-sm" data-i18n="btn_add">Add</button>
+                    </div>
+                </div>
+                <h3 data-i18n="profile_section">Profile</h3>
+                <div class="pref-group">
+                    <label data-i18n="label_sex">Sex</label>
+                    <select name="sex">
+                        <option value="" data-i18n="not_set">Not set</option>
+                        <option value="male" data-i18n="sex_male">Male</option>
+                        <option value="female" data-i18n="sex_female">Female</option>
+                    </select>
+                </div>
+                <div class="pref-group">
+                    <label data-i18n="label_date_of_birth">Date of birth</label>
+                    <input type="date" name="dateOfBirth" />
+                </div>
+                <div class="pref-group">
+                    <label data-i18n="label_height">Height (cm)</label>
+                    <input type="number" name="heightCm" min="50" max="300" step="0.5" />
+                </div>
+                <div class="pref-group">
+                    <label data-i18n="label_target_weight">🎯 Target weight (kg)</label>
+                    <input type="number" name="targetWeightKg" min="20" max="300" step="0.1" />
+                </div>
+                <div class="pref-group">
+                    <label data-i18n="label_target_waist">🎯 Target waist circumference (cm)</label>
+                    <input type="number" name="targetWaistCm" min="30" max="200" step="0.5" />
+                </div>
+                <h3 data-i18n="reminders_section">⏰ Daily Reminders</h3>
+                <div class="pref-group">
+                    <label class="notification-toggle">
+                        <input type="checkbox" name="enableNotifications" />
+                        <span data-i18n="enable_notifications">Enable check-in notifications</span>
+                    </label>
+                    <p id="notification-status" class="notification-status"></p>
+                    <div id="reminder-times-list" class="reminder-list"></div>
+                    <div class="reminder-add-row">
+                        <input type="time" id="new-reminder-time" />
+                        <button type="button" id="btn-add-reminder" class="btn btn-secondary btn-sm" data-i18n="btn_add">Add</button>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+            </form>
+            <div class="pref-section">
+                <h3 data-i18n="account_section">Account</h3>
+                <button id="btn-logout" class="btn btn-danger" data-i18n="btn_logout">Logout</button>
+            </div>
+            <div class="attribution">
+                <p data-i18n="attribution">Data source: Fineli®, THL (CC-BY 4.0)</p>
+            </div>
+        </div>
+    </template>
+
+    <template id="tmpl-photo-results">
+        <div class="page photo-results">
+            <h2 data-i18n="page_photo_analysis">📸 Photo Analysis</h2>
+            <div class="photo-analysis-container">
+                <div class="photo-thumbnail-wrapper">
+                    <img id="photo-preview" class="photo-thumbnail" alt="Food photo" />
+                </div>
+                <div id="photo-loading" class="photo-loading" style="display:none;">
+                    <div class="spinner"></div>
+                    <p data-i18n="analyzing_image">Analyzing image...</p>
+                </div>
+                <div id="photo-error" class="photo-error" style="display:none;"></div>
+                <div id="photo-items-list" class="photo-items-list" style="display:none;">
+                    <h3 data-i18n="identified_foods">Identified foods</h3>
+                    <div id="photo-items"></div>
+                    <div class="photo-total" id="photo-total-calories"></div>
+                </div>
+                <div id="photo-actions" class="photo-actions" style="display:none;">
+                    <div class="meal-type-selector" id="photo-meal-type-selector">
+                        <button class="meal-type active" data-meal="breakfast" data-i18n="meal_breakfast">Breakfast</button>
+                        <button class="meal-type" data-meal="lunch" data-i18n="meal_lunch">Lunch</button>
+                        <button class="meal-type" data-meal="snack" data-i18n="meal_snack">Snack</button>
+                        <button class="meal-type" data-meal="dinner" data-i18n="meal_dinner">Dinner</button>
+                        <button class="meal-type" data-meal="supper" data-i18n="meal_supper">Supper</button>
+                    </div>
+                    <div class="consumption-time-field">
+                        <label for="photo-consumption-time" data-i18n="consumption_time">Time</label>
+                        <input type="time" id="photo-consumption-time" step="60" />
+                    </div>
+                    <button id="btn-save-photo-meal" class="btn btn-primary" data-i18n="btn_save_as_meal">💾 Save as meal</button>
+                    <button id="btn-photo-retake" class="btn btn-secondary" data-i18n="btn_retake">📸 Retake</button>
+                    <button id="btn-photo-cancel" class="btn btn-secondary" data-i18n="btn_cancel_back">← Cancel</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="/js/api.js?v=20260814151750"></script>
+    <script src="/js/auth.js?v=20260814151750"></script>
+    <script src="/js/db.js?v=20260814151750"></script>
+    <script src="/js/i18n.js?v=20260814151750"></script>
+    <script src="/js/app.js?v=20260814151750"></script>
+    <script src="/js/shared/utils.js?v=20260814151750"></script>
+    <script src="/js/shared/favorites.js?v=20260814151750"></script>
+    <script src="/js/vendor/zxing-browser.min.js"></script>
+    <script src="/js/shared/barcode.js?v=20260814151750"></script>
+    <script src="/js/views/dashboard.js?v=20260814151750"></script>
+    <script src="/js/views/log-meal.js?v=20260814151750"></script>
+    <script src="/js/views/recipes.js?v=20260814151750"></script>
+    <script src="/js/views/photo-results.js?v=20260814151750"></script>
+    <script src="/js/views/drinks.js?v=20260814151750"></script>
+    <script src="/js/views/checkin.js?v=20260814151750"></script>
+    <script src="/js/views/metrics.js?v=20260814151750"></script>
+    <script src="/js/views/stats.js?v=20260814151750"></script>
+    <script src="/js/views/preferences.js?v=20260814151750"></script>
+    <script src="/js/views/ingredients.js?v=20260814151750"></script>
+</body>
+</html>

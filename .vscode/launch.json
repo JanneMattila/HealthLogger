@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run HealthLogger",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/HealthLogger/bin/Debug/net10.0/HealthLogger.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/HealthLogger",
+      "noDebug": true,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "Debug HealthLogger",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/HealthLogger/bin/Debug/net10.0/HealthLogger.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/HealthLogger",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  ]
+}
