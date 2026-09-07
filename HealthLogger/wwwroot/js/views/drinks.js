@@ -1,7 +1,11 @@
 // Drinks view
 Object.assign(App.prototype, {
+    getBuiltInDrinkFineliIds() {
+        return [900, 902, 906, 910, 920, 922];
+    },
+
     getDrinksStorageKey() {
-        const today = new Date().toISOString().split('T')[0];
+        const today = this.getLocalDateValue();
         return `HealthLogger_drinks_${today}`;
     },
 
@@ -26,7 +30,7 @@ Object.assign(App.prototype, {
     },
 
     getBuiltInDrinksFromEntries(entries) {
-        const builtInFineliIds = new Set([900, 902, 906, 910, 920, 922]);
+        const builtInFineliIds = new Set(this.getBuiltInDrinkFineliIds());
         return entries.flatMap(entry => (entry.items || [])
             .filter(item => builtInFineliIds.has(item.foodItem?.fineliId))
             .map(item => ({
@@ -143,7 +147,7 @@ Object.assign(App.prototype, {
                 const addButton = overlay.querySelector('#btn-drink-add');
                 addButton.disabled = true;
                 try {
-                    const today = new Date().toISOString().split('T')[0];
+                    const today = this.getLocalDateValue();
                     const consumptionTime = overlay.querySelector('#quick-drink-consumption-time').value;
                     const entry = await API.createEntry({ entryDate: today, mealType: selectedMealType, consumptionTime: this.toApiConsumptionTime(consumptionTime) });
                     await API.addEntryItem(entry.id, { foodItemId: food.id, portionGrams: ml });
@@ -263,7 +267,6 @@ Object.assign(App.prototype, {
                     <p class="drink-no-results-text">${this.t('drink_no_results')}</p>
                     <div class="drink-no-results-actions">
                         <button class="btn btn-secondary btn-sm" id="btn-drink-manual">${this.t('drink_enter_manually')}</button>
-                        <button class="btn btn-secondary btn-sm" id="btn-drink-camera">📸 ${this.t('drink_scan_label')}</button>
                     </div>
                 </div>
                 <div id="drink-nutrition-loading" style="display:none; text-align:center; padding:0.5rem; color:var(--text-secondary); font-size:0.85rem;">
@@ -447,18 +450,6 @@ Object.assign(App.prototype, {
             nutritionSection.style.display = 'block';
         });
 
-        // Camera button for scanning nutrition label
-        overlay.querySelector('#btn-drink-camera')?.addEventListener('click', () => {
-            const drinkName = nameInput.value.trim();
-            overlay.remove();
-            // Use AI online search for the drink name
-            if (drinkName) {
-                this._scanDrinkNutrition(drinkName);
-            } else {
-                this._scanDrinkPhoto();
-            }
-        });
-
         if (prefilledName) {
             searchDrinks(prefilledName);
         }
@@ -594,45 +585,6 @@ Object.assign(App.prototype, {
         }
     },
 
-    _scanDrinkPhoto() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/jpeg,image/png,image/webp';
-        input.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            if (file.size > 10 * 1024 * 1024) {
-                this.showToast(this.t('error_image_too_large'), 'error');
-                return;
-            }
-            this.showToast(this.t('analyzing_image'), 'success');
-            try {
-                const result = await API.analyzePhoto(file);
-                if (result?.items?.length > 0) {
-                    const item = result.items[0];
-                    const drinkName = item.name || '';
-                    this.showDrinkDialog(drinkName);
-                    setTimeout(() => {
-                        const kcalEl = document.querySelector('#drink-kcal');
-                        if (kcalEl && item.estimatedCalories) {
-                            kcalEl.value = Math.round(item.estimatedCalories / (item.estimatedPortionGrams || 100) * 100);
-                            document.querySelector('#drink-nutrition-section').style.display = 'block';
-                            kcalEl.dispatchEvent(new Event('input'));
-                        }
-                    }, 100);
-                } else {
-                    this.showToast(this.t('search_failed'), 'error');
-                    this.showDrinkDialog('');
-                }
-            } catch (e) {
-                console.error('Photo analysis failed:', e);
-                this.showToast(this.t('analysis_failed'), 'error');
-                this.showDrinkDialog('');
-            }
-        };
-        input.click();
-    },
-
     async setupDrinks() {
         document.getElementById('btn-quick-water')?.addEventListener('click', () => {
             this.showWaterDialog();
@@ -678,7 +630,7 @@ Object.assign(App.prototype, {
         }));
         let ingredientDrinks = [];
         try {
-            const today = new Date().toISOString().split('T')[0];
+            const today = this.getLocalDateValue();
             ingredientDrinks = this.getBuiltInDrinksFromEntries(await API.getEntries(today));
         } catch (e) {
             console.error('Built-in drinks load failed:', e);

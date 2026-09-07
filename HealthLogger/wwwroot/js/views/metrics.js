@@ -1,6 +1,12 @@
 // Metrics view
 Object.assign(App.prototype, {
     async setupMetrics() {
+        const previousMetrics = {
+            weightKg: null,
+            waistCircumferenceCm: null,
+            systolicBP: null,
+            diastolicBP: null
+        };
         const formatDate = (dateStr) => {
             if (!dateStr) return '';
             const d = new Date(dateStr);
@@ -10,6 +16,11 @@ Object.assign(App.prototype, {
         try {
             const latest = await API.getLatestMetrics();
             if (latest) {
+                previousMetrics.weightKg = latest.weightKg;
+                previousMetrics.waistCircumferenceCm = latest.waistCircumferenceCm;
+                previousMetrics.systolicBP = latest.systolicBP;
+                previousMetrics.diastolicBP = latest.diastolicBP;
+
                 const form = document.getElementById('metrics-form');
                 const weightDate = formatDate(latest.weightMeasurementDate);
                 const waistDate = formatDate(latest.waistMeasurementDate);
@@ -65,13 +76,18 @@ Object.assign(App.prototype, {
         document.getElementById('metrics-form')?.addEventListener('submit', async (e) => {
             e.preventDefault();
             const form = e.target;
-            const today = new Date().toISOString().split('T')[0];
+            const today = this.getLocalDateValue();
+            const weightKg = parseFloat(form.weightKg?.value) || null;
+            const waistCircumferenceCm = parseFloat(form.waistCircumferenceCm?.value) || null;
+            const systolicBP = parseInt(form.systolicBP?.value) || null;
+            const diastolicBP = parseInt(form.diastolicBP?.value) || null;
+            const bloodPressureMeasuredNow = form.bloodPressureMeasuredNow?.checked;
             const metric = {
                 measurementDate: today,
-                weightKg: parseFloat(form.weightKg?.value) || null,
-                waistCircumferenceCm: parseFloat(form.waistCircumferenceCm?.value) || null,
-                systolicBP: parseInt(form.systolicBP?.value) || null,
-                diastolicBP: parseInt(form.diastolicBP?.value) || null,
+                weightKg: weightKg !== previousMetrics.weightKg || form.weightMeasuredNow?.checked ? weightKg : null,
+                waistCircumferenceCm: waistCircumferenceCm !== previousMetrics.waistCircumferenceCm || form.waistMeasuredNow?.checked ? waistCircumferenceCm : null,
+                systolicBP: systolicBP !== previousMetrics.systolicBP || bloodPressureMeasuredNow ? systolicBP : null,
+                diastolicBP: diastolicBP !== previousMetrics.diastolicBP || bloodPressureMeasuredNow ? diastolicBP : null,
                 notes: form.notes?.value || null
             };
             try {
@@ -84,8 +100,8 @@ Object.assign(App.prototype, {
         });
 
         try {
-            const to = new Date().toISOString().split('T')[0];
-            const from = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+            const to = this.getLocalDateValue();
+            const from = this.getLocalDateValue(new Date(Date.now() - 90 * 86400000));
             const metrics = await API.getMetrics(from, to);
 
             if (metrics.length > 0) {

@@ -17,6 +17,13 @@ Object.assign(App.prototype, {
         return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
     },
 
+    getLocalDateValue(date = new Date()) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    },
+
     toApiConsumptionTime(time) {
         return time ? `${time}:00` : null;
     },
@@ -91,12 +98,32 @@ Object.assign(App.prototype, {
         }
     },
 
-    showToast(message, type = 'success') {
+    showToast(message, type = 'success', options = {}) {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
-        toast.textContent = message;
+        if (options.className) toast.classList.add(options.className);
+        toast.setAttribute('role', 'status');
+        toast.style.setProperty('--toast-visible-duration', `${Math.max((options.duration || 3000) - 300, 0)}ms`);
+
+        const text = document.createElement('span');
+        text.textContent = message;
+        toast.appendChild(text);
+
+        const dismiss = () => toast.remove();
+        if (options.actionLabel && options.onAction) {
+            const action = document.createElement('button');
+            action.type = 'button';
+            action.className = 'toast-action';
+            action.textContent = options.actionLabel;
+            action.addEventListener('click', () => {
+                dismiss();
+                options.onAction();
+            });
+            toast.appendChild(action);
+        }
+
         document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
+        setTimeout(dismiss, options.duration || 3000);
     },
 
     destroyChart(id) {

@@ -4,6 +4,10 @@ Object.assign(App.prototype, {
         this.mealItems = [];
         const searchInput = document.getElementById('food-search-input');
         const searchResults = document.getElementById('search-results');
+        const categorySelect = document.getElementById('meal-ingredient-category');
+        const drinkSearchInput = document.getElementById('meal-drink-search');
+        const drinkResults = document.getElementById('meal-drink-results');
+        const mealDateInput = document.getElementById('meal-entry-date');
         let searchTimeout;
         const mealTypes = this.getMealTypes();
 
@@ -159,12 +163,12 @@ Object.assign(App.prototype, {
                     recipeGroups.get(instanceId).items.push(pair);
                 });
                 return `
-                    <section class="today-meal-group" data-meal-type="${mealType}">
-                        <div class="today-meal-group-header">
-                            <h4>${this.t(`meal_${mealType}`)}</h4>
+                    <details class="today-meal-group" data-meal-type="${mealType}">
+                        <summary><span class="today-meal-group-header">
+                            <span class="today-meal-group-title">${this.t(`meal_${mealType}`)}</span>
                             <span class="today-meal-group-total">${this.formatCalories(calories)}</span>
-                        </div>
-                        ${displayUnits.length ? displayUnits.map(unit => {
+                        </span></summary>
+                        <div class="today-meal-group-content">${displayUnits.length ? displayUnits.map(unit => {
                             if (unit.type === 'item') return renderItem(unit.pair);
                             const recipeName = unit.items[0].item.sourceRecipeName || this.t('unknown');
                             const recipeCalories = unit.items.reduce((sum, pair) => sum + itemCalories(pair.item), 0);
@@ -176,8 +180,8 @@ Object.assign(App.prototype, {
                                     </summary>
                                     <div class="today-recipe-items">${unit.items.map(renderItem).join('')}</div>
                                 </details>`;
-                        }).join('') : `<div class="today-meal-empty">${this.t('no_meal_items')}</div>`}
-                    </section>`;
+                        }).join('') : `<div class="today-meal-empty">${this.t('no_meal_items')}</div>`}</div>
+                    </details>`;
             }).join('');
 
             meals.querySelectorAll('.today-meal-edit').forEach(button => {
@@ -205,22 +209,27 @@ Object.assign(App.prototype, {
         };
 
         const loadTodayMeals = async () => {
-            const today = new Date().toISOString().split('T')[0];
             try {
-                renderTodayMeals(await API.getEntries(today));
+                renderTodayMeals(await API.getEntries(mealDateInput?.value || this.getLocalDateValue()));
             } catch (error) {
-                console.error('Today meals load failed:', error);
+                console.error('Meals load failed:', error);
             }
         };
+
+        if (!searchInput) {
+            document.getElementById('btn-add-meal-from-today')?.addEventListener('click', () => this.navigate('add-meal'));
+            await loadTodayMeals();
+            return;
+        }
 
         const updateMealItemsHeading = () => {
             const heading = document.getElementById('meal-items-title');
             if (heading) heading.textContent = `${this.t('meal_items_title')} · ${this.t(`meal_${this.currentMealType}`)}`;
         };
 
-        const renderSearchResults = (results) => {
+        const renderSearchResults = (results, container = searchResults) => {
             const sortedResults = this.sortFavoritesFirst(results);
-            searchResults.innerHTML = sortedResults.map(f => {
+            container.innerHTML = sortedResults.map(f => {
                 const primaryName = this.getLocalizedName(f);
                 const secondaryName = this.getSecondaryName(f);
                 const isFavorite = this.isFavorite(f.id);
@@ -243,10 +252,28 @@ Object.assign(App.prototype, {
                 `;
             }).join('');
 
-            searchResults.querySelectorAll('.search-result').forEach(el => {
-                el.addEventListener('click', () => this.showPortionDialog(el.dataset));
+            container.querySelectorAll('.search-result').forEach(el => {
+                const food = sortedResults.find(item => item.id === el.dataset.id);
+                const showIngredient = async () => {
+                    if (!food) return;
+                    try {
+                        this.showMealIngredientDialog(await API.getFood(food.id));
+                    } catch {
+                        this.showMealIngredientDialog(food);
+                    }
+                };
+                el.addEventListener('click', showIngredient);
+                el.setAttribute('role', 'button');
+                el.tabIndex = 0;
+                el.addEventListener('keydown', event => {
+                    if (event.target !== el) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        showIngredient();
+                    }
+                });
             });
-            searchResults.querySelectorAll('.search-favorite').forEach(button => {
+            container.querySelectorAll('.search-favorite').forEach(button => {
                 button.addEventListener('click', (event) => {
                     event.stopPropagation();
                     const food = sortedResults.find(item => item.id === button.dataset.favoriteId);
@@ -260,91 +287,195 @@ Object.assign(App.prototype, {
                         fat: food.fat,
                         carbs: food.carbohydrate
                     });
-                    renderSearchResults(results);
+                    renderSearchResults(results, container);
                 });
+                button.addEventListener('keydown', event => event.stopPropagation());
             });
         };
 
-        this.currentMealType = this.getEstimatedMealType();
+        let builtInDrinks;
+        const renderDrinks = () => {
+            if (!builtInDrinks || !drinkResults) return;
+            const locale = window.i18n?.lang || 'en';
+            const query = drinkSearchInput?.value.trim().toLocaleLowerCase(locale) || '';
+            const matches = query
+                ? builtInDrinks.filter(drink => [drink.nameFi, drink.nameEn]
+                    .some(name => String(name || '').toLocaleLowerCase(locale).includes(query)))
+                : builtInDrinks;
+            if (matches.length) renderSearchResults(matches, drinkResults);
+            else drinkResults.innerHTML = `<p class="meal-source-empty">${this.t('no_drink_matches')}</p>`;
+        };
+        const loadDrinks = async () => {
+            if (builtInDrinks || !drinkResults) return;
+            drinkResults.innerHTML = `<p class="meal-source-empty">${this.t('loading')}</p>`;
+            try {
+                builtInDrinks = await Promise.all(this.getBuiltInDrinkFineliIds().map(id => this.getBuiltInDrink(id)));
+                renderDrinks();
+            } catch (error) {
+                console.error('Drink load failed:', error);
+                drinkResults.innerHTML = `<p class="meal-source-empty">${this.t('error_loading')}</p>`;
+            }
+        };
+        drinkSearchInput?.addEventListener('input', renderDrinks);
+
+        const sourceTabs = document.querySelectorAll('.meal-source-tab');
+        const selectSourceTab = selectedTab => {
+            sourceTabs.forEach(tab => {
+                const selected = tab === selectedTab;
+                tab.classList.toggle('active', selected);
+                tab.setAttribute('aria-selected', String(selected));
+                tab.tabIndex = selected ? 0 : -1;
+                document.getElementById(`meal-panel-${tab.dataset.panel}`).hidden = !selected;
+            });
+            if (selectedTab.dataset.panel === 'lookup') searchInput.focus();
+            if (selectedTab.dataset.panel === 'drinks') {
+                drinkSearchInput?.focus();
+                loadDrinks();
+            }
+        };
+        sourceTabs.forEach(tab => {
+            tab.addEventListener('click', () => selectSourceTab(tab));
+            tab.addEventListener('keydown', event => {
+                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                event.preventDefault();
+                const tabs = Array.from(sourceTabs);
+                const direction = event.key === 'ArrowRight' ? 1 : -1;
+                const nextTab = tabs[(tabs.indexOf(tab) + direction + tabs.length) % tabs.length];
+                nextTab.focus();
+                selectSourceTab(nextTab);
+            });
+        });
+
+        const requestedMealDraft = this.pendingMealDraft;
+        this.pendingMealDraft = null;
+        this.currentMealType = requestedMealDraft?.mealType || this.getEstimatedMealType();
         const consumptionTimeInput = document.getElementById('meal-consumption-time');
-        if (consumptionTimeInput) consumptionTimeInput.value = this.getCurrentTimeValue();
-        const mealTypeButtons = document.querySelectorAll('.log-meal > .meal-type-selector .meal-type');
+        const requestedMealDate = this.pendingMealDate;
+        this.pendingMealDate = null;
+        mealDateInput.value = requestedMealDraft?.entryDate || requestedMealDate || this.getLocalDateValue();
+        mealDateInput.addEventListener('change', loadTodayMeals);
+        if (consumptionTimeInput) consumptionTimeInput.value = requestedMealDraft?.consumptionTime || this.getCurrentTimeValue();
+        const mealTypeButtons = document.querySelectorAll('.meal-composer-details .meal-type-selector .meal-type');
         mealTypeButtons.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.meal === this.currentMealType);
+            const selected = btn.dataset.meal === this.currentMealType;
+            btn.classList.toggle('active', selected);
+            btn.setAttribute('aria-checked', String(selected));
             btn.addEventListener('click', () => {
-                mealTypeButtons.forEach(b => b.classList.remove('active'));
+                mealTypeButtons.forEach(b => {
+                    b.classList.remove('active');
+                    b.setAttribute('aria-checked', 'false');
+                });
                 btn.classList.add('active');
+                btn.setAttribute('aria-checked', 'true');
                 this.currentMealType = btn.dataset.meal;
                 updateMealItemsHeading();
             });
         });
 
+        try {
+            const categories = await API.getFoodCategories();
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                categorySelect.appendChild(option);
+            });
+        } catch (e) { /* category filtering remains optional when categories cannot be loaded */ }
+
+        this.enhanceSelectWithSearch(categorySelect);
+
+        const refreshSearchResults = async () => {
+            const query = searchInput.value.trim();
+            const category = categorySelect?.value || '';
+            if (query.length < 2 && !category) {
+                searchResults.innerHTML = '';
+                return;
+            }
+
+            try {
+                const results = query.length >= 2
+                    ? await this.searchFoods(query)
+                    : await API.browseFoods(category, window.i18n?.lang || 'en', 100, 0);
+                renderSearchResults(category
+                    ? results.filter(food => food.category === category)
+                    : results);
+            } catch (e) {
+                console.error('Search failed:', e);
+            }
+        };
+
         searchInput?.addEventListener('input', () => {
             clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(async () => {
-                const query = searchInput.value.trim();
-                if (query.length < 2) {
-                    searchResults.innerHTML = '';
-                    return;
-                }
-
-                try {
-                    const results = await this.searchFoods(query);
-                    renderSearchResults(results);
-                } catch (e) {
-                    console.error('Search failed:', e);
-                }
-            }, 300);
+            searchTimeout = setTimeout(refreshSearchResults, 300);
+        });
+        categorySelect?.addEventListener('change', () => {
+            clearTimeout(searchTimeout);
+            refreshSearchResults();
         });
 
-        document.getElementById('btn-camera')?.addEventListener('click', () => {
-            this.showPhotoSourceDialog();
-        });
+        document.getElementById('btn-cancel-add-meal')?.addEventListener('click', () => this.navigate('meals'));
 
         document.getElementById('btn-barcode-meal')?.addEventListener('click', () => {
-            this.showBarcodeDialog(food => this.showPortionDialog({
-                id: food.id,
-                name: this.getLocalizedName(food),
-                kcal: food.energyKcal,
-                protein: food.protein,
-                fat: food.fat,
-                carbs: food.carbohydrate,
-                defaultPortion: food.defaultPortionGrams
-            }));
+            this.showBarcodeDialog(food => this.showMealIngredientDialog(food));
         });
 
         document.getElementById('btn-save-meal')?.addEventListener('click', async () => {
             if (this.mealItems.length === 0) return;
             try {
-                const today = new Date().toISOString().split('T')[0];
-                const entry = await API.createEntry({
-                    entryDate: today,
+                await API.createMeal({
+                    entryDate: mealDateInput.value,
                     mealType: this.currentMealType,
-                    consumptionTime: this.toApiConsumptionTime(consumptionTimeInput?.value || this.getCurrentTimeValue())
-                });
-                for (const item of this.mealItems) {
-                    const entryItem = {
+                    consumptionTime: this.toApiConsumptionTime(consumptionTimeInput?.value || this.getCurrentTimeValue()),
+                    notes: null,
+                    items: this.mealItems.map(item => ({
                         foodItemId: item.id || undefined,
                         portionGrams: item.portion,
-                        customCalories: item.customCalories || undefined
-                    };
-                    if (!item.id || item.id === '') delete entryItem.foodItemId;
-                    await API.addEntryItem(entry.id, entryItem);
-                }
+                        customCalories: item.customCalories ?? undefined,
+                        notes: item.id ? null : item.name
+                    }))
+                });
                 this.saveRecentFoods(this.mealItems);
                 this.mealItems = [];
                 this.updateMealItemsList();
-                await loadTodayMeals();
                 this.showToast(this.t('meal_saved'));
+                this.pendingMealDate = mealDateInput.value;
+                this.navigate('meals');
             } catch (e) {
                 alert(`${this.t('toast_save_failed')}: ${e.message}`);
             }
         });
 
         updateMealItemsHeading();
-        await loadTodayMeals();
-        this.renderRecentFoods(searchResults);
-        this.renderRecipeQuickAdd(searchResults);
+        this.renderRecentFoods();
+        this.renderRecipeQuickAdd();
+    },
+
+    async setupAddMeal() {
+        await this.setupLogMeal();
+    },
+
+    showMealIngredientDialog(food) {
+        this.showIngredientDetail(food, window.i18n?.lang || 'en', {
+            getMealContext: () => ({
+                entryDate: document.getElementById('meal-entry-date')?.value,
+                mealType: this.currentMealType,
+                consumptionTime: document.getElementById('meal-consumption-time')?.value
+            }),
+            onAdd: ({ name, portionGrams, nutrition }) => {
+                this.mealItems.push({
+                    id: food.id,
+                    name,
+                    portion: portionGrams,
+                    calories: nutrition.energyKcal || 0,
+                    customCalories: null,
+                    kcalPer100: Number(food.energyKcal) || 0,
+                    protein: Number(food.protein) || 0,
+                    fat: Number(food.fat) || 0,
+                    carbs: Number(food.carbohydrate) || 0
+                });
+                this.updateMealItemsList();
+            }
+        });
     },
 
     saveRecentFoods(items) {
@@ -353,39 +484,100 @@ Object.assign(App.prototype, {
             for (const item of items) {
                 if (!item.id) continue;
                 recent = recent.filter(r => r.id !== item.id);
-                recent.unshift({ id: item.id, name: item.name, kcal: item.calories, portion: item.portion });
+                recent.unshift({
+                    id: item.id,
+                    name: item.name,
+                    kcal: item.calories,
+                    portion: item.portion,
+                    kcalPer100: item.kcalPer100,
+                    protein: item.protein,
+                    fat: item.fat,
+                    carbohydrate: item.carbs
+                });
             }
-            localStorage.setItem('recentFoods', JSON.stringify(recent.slice(0, 5)));
+            localStorage.setItem('recentFoods', JSON.stringify(recent.slice(0, 250)));
         } catch (e) { /* localStorage unavailable */ }
     },
 
-    renderRecentFoods(searchResults) {
+    renderRecentFoods() {
         try {
             const recent = JSON.parse(localStorage.getItem('recentFoods') || '[]');
-            if (recent.length === 0) return;
-
-            const container = document.createElement('div');
+            const container = document.getElementById('meal-recent-items');
+            if (!container) return;
             container.className = 'recent-foods';
-            container.innerHTML = `<h3>${this.t('recent_foods')}</h3>` + recent.map(f => `
-                <div class="search-result" data-id="${f.id}" data-kcal="${Math.round(f.kcal / f.portion * 100)}"
-                     data-name="${f.name}" data-protein="0" data-fat="0" data-carbs="0">
-                    <div class="food-name">${f.name}</div>
-                    <div class="food-cal">${this.formatCalories(f.kcal)} (${f.portion} g)</div>
-                </div>
-            `).join('');
-            searchResults.parentNode.insertBefore(container, searchResults.nextSibling);
-            container.querySelectorAll('.search-result').forEach(el => {
-                el.addEventListener('click', () => this.showPortionDialog(el.dataset));
-            });
+            let visibleCount = 25;
+            let query = '';
+            const renderPage = () => {
+                const locale = window.i18n?.lang || 'en';
+                const normalizedQuery = query.toLocaleLowerCase(locale);
+                const filteredRecent = normalizedQuery
+                    ? recent.filter(food => String(food.name || '').toLocaleLowerCase(locale).includes(normalizedQuery))
+                    : recent;
+                const visible = filteredRecent.slice(0, visibleCount);
+                container.innerHTML = `<h3>${this.t('recent_foods')}</h3>
+                    <input type="search" class="recent-food-search" value="${escapeIngredientHtml(query)}"
+                           placeholder="${this.t('recent_foods_search_placeholder')}"
+                           aria-label="${this.t('recent_foods_search_placeholder')}">`
+                    + (visible.length ? visible.map((f, index) => `
+                    <div class="search-result" data-recent-index="${index}">
+                        <div class="food-name">${escapeIngredientHtml(f.name)}</div>
+                        <div class="food-cal">${this.formatCalories(f.kcal)} (${f.portion} g)</div>
+                    </div>
+                `).join('') : `<p class="meal-source-empty">${this.t(recent.length ? 'no_recent_food_matches' : 'no_recent_items')}</p>`)
+                    + (visibleCount < filteredRecent.length
+                        ? `<button type="button" class="btn btn-secondary recent-load-more">${this.t('btn_load_more')}</button>`
+                        : '');
+                const filterInput = container.querySelector('.recent-food-search');
+                filterInput?.addEventListener('input', event => {
+                    query = event.target.value.trim();
+                    visibleCount = 25;
+                    renderPage();
+                    container.querySelector('.recent-food-search')?.focus();
+                });
+                container.querySelectorAll('.search-result').forEach(el => {
+                    const recentFood = visible[Number(el.dataset.recentIndex)];
+                    const showIngredient = async () => {
+                        try {
+                            this.showMealIngredientDialog(await API.getFood(recentFood.id));
+                        } catch {
+                            const kcalPer100 = Number(recentFood.kcalPer100)
+                                || (Number(recentFood.portion) > 0 ? Number(recentFood.kcal) / Number(recentFood.portion) * 100 : 0);
+                            this.showMealIngredientDialog({
+                                id: recentFood.id,
+                                nameEn: recentFood.name,
+                                nameFi: recentFood.name,
+                                defaultPortionGrams: Number(recentFood.portion) || 100,
+                                energyKcal: kcalPer100,
+                                protein: Number(recentFood.protein) || 0,
+                                fat: Number(recentFood.fat) || 0,
+                                carbohydrate: Number(recentFood.carbohydrate) || 0
+                            });
+                        }
+                    };
+                    el.addEventListener('click', showIngredient);
+                    el.setAttribute('role', 'button');
+                    el.tabIndex = 0;
+                    el.addEventListener('keydown', event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            showIngredient();
+                        }
+                    });
+                });
+                container.querySelector('.recent-load-more')?.addEventListener('click', () => {
+                    visibleCount += 25;
+                    renderPage();
+                });
+            };
+            renderPage();
         } catch (e) { /* localStorage unavailable */ }
     },
 
-    async renderRecipeQuickAdd(searchResults) {
+    async renderRecipeQuickAdd() {
         try {
             const recipes = await API.getRecipes();
-            if (!recipes || recipes.length === 0) return;
-
-            const container = document.createElement('div');
+            const container = document.getElementById('meal-recipe-items');
+            if (!container || !recipes || recipes.length === 0) return;
             container.className = 'recipe-quick-add';
             container.innerHTML = `<h3>${this.t('my_recipes')}</h3>` + recipes.map(r => {
                 const totalKcal = (r.ingredients || []).reduce((sum, ing) => {
@@ -401,84 +593,28 @@ Object.assign(App.prototype, {
                         <div class="food-cal">${this.formatCalories(totalKcal)}</div>
                     </div>`;
             }).join('');
-            const recentSection = searchResults.parentNode.querySelector('.recent-foods');
-            const insertBefore = recentSection ? recentSection.nextSibling : searchResults.nextSibling;
-            searchResults.parentNode.insertBefore(container, insertBefore);
-
             container.querySelectorAll('.recipe-quick-item').forEach(el => {
-                el.addEventListener('click', () => {
+                const selectRecipe = () => {
                     const recipe = recipes.find(item => item.id === el.dataset.recipeId);
-                    if (recipe) this.showRecipePortionSelector(recipe, this.currentMealType);
+                    if (recipe) this.showRecipePortionSelector(recipe, this.currentMealType,
+                        document.getElementById('meal-consumption-time')?.value,
+                        document.getElementById('meal-entry-date')?.value);
+                };
+                el.addEventListener('click', selectRecipe);
+                el.setAttribute('role', 'button');
+                el.tabIndex = 0;
+                el.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        selectRecipe();
+                    }
                 });
             });
         } catch (e) { /* no recipes */ }
     },
 
-    showPortionDialog(dataset) {
-        const isFav = dataset.id ? this.isFavorite(dataset.id) : false;
-        const overlay = document.createElement('div');
-        overlay.className = 'portion-dialog';
-        overlay.innerHTML = `
-            <div class="portion-content">
-                <div class="portion-header">
-                    <h3>${dataset.name}</h3>
-                    ${dataset.id ? `<button class="btn-favorite ${isFav ? 'active' : ''}" id="btn-fav-toggle" title="${this.t('toggle_favorite')}">${isFav ? '★' : '☆'}</button>` : ''}
-                </div>
-                <label>${this.t('portion_label')}</label>
-                <input type="number" id="portion-grams" value="${dataset.portion || dataset.defaultPortion || 100}" min="0.1" step="0.1" />
-                <div class="portion-buttons">
-                    <button class="btn btn-secondary" id="btn-portion-cancel">${this.t('btn_cancel')}</button>
-                    <button class="btn btn-primary" id="btn-portion-add">${this.t('btn_add')}</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-        this.dismissOverlayOnClickOutside(overlay);
-
-        const favBtn = overlay.querySelector('#btn-fav-toggle');
-        if (favBtn) {
-            favBtn.onclick = () => {
-                this.toggleFavorite({
-                    id: dataset.id,
-                    name: dataset.name,
-                    type: 'food',
-                    kcalPer100: parseFloat(dataset.kcal) || 0,
-                    protein: parseFloat(dataset.protein) || 0,
-                    fat: parseFloat(dataset.fat) || 0,
-                    carbs: parseFloat(dataset.carbs) || 0
-                });
-                const nowFav = this.isFavorite(dataset.id);
-                favBtn.textContent = nowFav ? '★' : '☆';
-                favBtn.classList.toggle('active', nowFav);
-            };
-        }
-
-        overlay.querySelector('#btn-portion-cancel').onclick = () => overlay.remove();
-        overlay.querySelector('#btn-portion-add').onclick = () => {
-            const grams = parseFloat(document.getElementById('portion-grams').value) || 100;
-            const kcalPer100 = parseFloat(dataset.kcal) || 0;
-            const isPhotoResult = dataset.source === 'photo';
-            const calories = isPhotoResult ? kcalPer100 : (kcalPer100 * grams / 100);
-            this.mealItems.push({
-                id: dataset.id,
-                name: dataset.name,
-                portion: grams,
-                calories,
-                customCalories: isPhotoResult ? kcalPer100 : null,
-                kcalPer100,
-                protein: parseFloat(dataset.protein) || 0,
-                fat: parseFloat(dataset.fat) || 0,
-                carbs: parseFloat(dataset.carbs) || 0
-            });
-            this.updateMealItemsList();
-            overlay.remove();
-        };
-    },
-
     showMealItemEditor(entry, item, onSaved) {
         const name = item.foodItem ? this.getLocalizedName(item.foodItem) : (item.notes || this.t('unknown'));
-        const mealTypes = this.getMealTypes();
-        let selectedMealType = entry.mealType;
         const overlay = document.createElement('div');
         overlay.className = 'portion-dialog';
         overlay.innerHTML = `
@@ -487,13 +623,6 @@ Object.assign(App.prototype, {
                 <p>${name}</p>
                 <label for="edit-meal-item-grams">${this.t('amount_grams')}</label>
                 <input type="number" id="edit-meal-item-grams" value="${item.portionGrams}" min="0.01" step="any" />
-                <label>${this.t('meal_type_label')}</label>
-                <div class="meal-type-selector edit-meal-type-selector" role="radiogroup" aria-label="${this.t('meal_type_label')}">
-                    ${mealTypes.map(mealType => `
-                        <button type="button" class="meal-type ${mealType === selectedMealType ? 'active' : ''}"
-                                data-meal-type="${mealType}" role="radio" aria-checked="${mealType === selectedMealType}">${this.t(`meal_${mealType}`)}</button>
-                    `).join('')}
-                </div>
                 <div class="portion-buttons">
                     <button type="button" class="btn btn-secondary" id="btn-edit-meal-cancel">${this.t('btn_cancel')}</button>
                     <button type="button" class="btn btn-primary" id="btn-edit-meal-save">${this.t('btn_save')}</button>
@@ -501,23 +630,13 @@ Object.assign(App.prototype, {
             </div>`;
         document.body.appendChild(overlay);
 
-        overlay.querySelectorAll('.edit-meal-type-selector button').forEach(button => {
-            button.addEventListener('click', () => {
-                selectedMealType = button.dataset.mealType;
-                overlay.querySelectorAll('.edit-meal-type-selector button').forEach(candidate => {
-                    const selected = candidate === button;
-                    candidate.classList.toggle('active', selected);
-                    candidate.setAttribute('aria-checked', String(selected));
-                });
-            });
-        });
         overlay.querySelector('#btn-edit-meal-cancel').addEventListener('click', () => overlay.remove());
         overlay.querySelector('#btn-edit-meal-save').addEventListener('click', async () => {
             const portionGrams = parseFloat(overlay.querySelector('#edit-meal-item-grams').value);
             if (!Number.isFinite(portionGrams) || portionGrams <= 0) return;
             overlay.querySelectorAll('button').forEach(button => { button.disabled = true; });
             try {
-                await API.updateEntryItem(entry.id, item.id, { portionGrams, mealType: selectedMealType });
+                await API.updateEntryItem(entry.id, item.id, { portionGrams });
                 overlay.remove();
                 await onSaved();
                 this.showToast(this.t('toast_saved'));

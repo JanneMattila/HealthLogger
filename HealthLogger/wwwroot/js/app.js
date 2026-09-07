@@ -4,20 +4,19 @@ class App {
         this.currentMealType = null;
         this.mealItems = [];
         this.charts = {};
-        this.photoResults = null;
-        this.photoItems = [];
         this.isReloading = false;
         this.pageRoutes = {
             dashboard: '/',
             'log-meal': '/today',
+            'add-meal': '/meals/new',
+            meals: '/meals',
             drinks: '/drinks',
             recipes: '/recipes',
             ingredients: '/ingredients',
             checkin: '/checkin',
             metrics: '/metrics',
             stats: '/stats',
-            preferences: '/preferences',
-            'photo-results': '/photo-results'
+            preferences: '/preferences'
         };
         this.historyNavigationReady = false;
     }
@@ -126,12 +125,22 @@ class App {
         clearInterval(this._reminderInterval);
         this.checkReminders();
         this._reminderInterval = setInterval(() => this.checkReminders(), 30000);
+
+        if (!this.reminderLifecycleReady) {
+            const checkAfterResume = () => {
+                if (!document.hidden) this.checkReminders();
+            };
+            window.addEventListener('focus', checkAfterResume);
+            document.addEventListener('visibilitychange', checkAfterResume);
+            this.reminderLifecycleReady = true;
+        }
     }
 
     async checkReminders() {
         if (this._checkingReminders) return;
         this._checkingReminders = true;
         try {
+            if (!window.matchMedia?.('(max-width: 767px), (pointer: coarse)').matches) return;
             if (localStorage.getItem('HealthLogger_notifications') !== 'true') return;
             const reminders = JSON.parse(localStorage.getItem('HealthLogger_reminders') || '[]');
             if (reminders.length === 0) return;
@@ -141,7 +150,7 @@ class App {
             const dueReminders = reminders.filter(time => time <= currentTime).sort();
             if (dueReminders.length === 0) return;
 
-            const today = now.toISOString().split('T')[0];
+            const today = this.getLocalDateValue(now);
             const notificationKey = `HealthLogger_reminder_shown_${today}`;
             const shownReminders = JSON.parse(localStorage.getItem(notificationKey) || '[]');
             const unshownReminders = dueReminders.filter(time => !shownReminders.includes(time));
@@ -156,18 +165,12 @@ class App {
 
             localStorage.setItem(notificationKey, JSON.stringify([...shownReminders, ...unshownReminders]));
             const message = this.t('reminder_checkin');
-            this.showToast(message, 'info');
-
-            if ('Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
-                const registration = await navigator.serviceWorker.ready;
-                await registration.showNotification(this.t('notification_title'), {
-                    body: message,
-                    icon: '/images/android-chrome-192x192.png',
-                    badge: '/images/android-chrome-192x192.png',
-                    tag: `daily-checkin-${today}`,
-                    data: { url: '/checkin' }
-                });
-            }
+            this.showToast(message, 'info', {
+                className: 'toast-reminder',
+                actionLabel: this.t('reminder_checkin_action'),
+                onAction: () => this.navigate('checkin'),
+                duration: 8000
+            });
         } catch (e) { /* reminders are best effort */ }
         finally { this._checkingReminders = false; }
     }
@@ -196,6 +199,7 @@ class App {
         document.getElementById('app-header').style.display = 'flex';
         document.getElementById('content').style.display = 'block';
 
+        this.setupDateChangeRefresh();
         this.setupHamburgerNav();
         this.setupNavigation();
         this.setupHistoryNavigation();
@@ -203,14 +207,33 @@ class App {
         this.navigate(this.getPageFromPath(window.location.pathname), { history: 'replace' });
     }
 
+    setupDateChangeRefresh() {
+        if (this.dateChangeRefreshReady) return;
+
+        this.lastActiveLocalDate = this.getLocalDateValue();
+        const refreshCurrentPageForNewDay = () => {
+            if (document.hidden) return;
+
+            const localDate = this.getLocalDateValue();
+            if (localDate === this.lastActiveLocalDate) return;
+
+            this.lastActiveLocalDate = localDate;
+            const dateDependentPages = new Set([
+                'dashboard', 'log-meal', 'meals', 'drinks', 'checkin', 'metrics', 'stats'
+            ]);
+            if (dateDependentPages.has(this.currentPage)) {
+                this.navigate(this.currentPage, { history: 'none' });
+            }
+        };
+
+        window.addEventListener('focus', refreshCurrentPageForNewDay);
+        document.addEventListener('visibilitychange', refreshCurrentPageForNewDay);
+        this.dateChangeRefreshReady = true;
+    }
+
     setupEscapeHandler() {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                const camera = document.querySelector('.camera-overlay');
-                if (camera) {
-                    camera.querySelector('#camera-cancel')?.click();
-                    return;
-                }
                 const updateOverlay = document.getElementById('app-update-overlay');
                 if (updateOverlay) return;
             }
@@ -288,8 +311,14 @@ class App {
         this.historyNavigationReady = true;
     }
 
+    dismissTransientOverlays() {
+        document.querySelectorAll('.portion-dialog').forEach(overlay => overlay.remove());
+    }
+
     navigate(page, options = {}) {
         if (!this.pageRoutes[page]) page = 'dashboard';
+
+        this.dismissTransientOverlays();
 
         const historyMode = options.history || 'push';
         const route = this.pageRoutes[page];
@@ -308,6 +337,7 @@ class App {
         if (template) {
             const content = document.getElementById('content');
             content.innerHTML = '';
+            content.classList.toggle('content-wide', page === 'add-meal');
             content.appendChild(template.content.cloneNode(true));
             this.applyTranslations(content);
             this.setupPage(page);
@@ -318,6 +348,8 @@ class App {
         switch (page) {
             case 'dashboard': await this.setupDashboard(); break;
             case 'log-meal': await this.setupLogMeal(); break;
+            case 'add-meal': await this.setupAddMeal(); break;
+            case 'meals': await this.setupMeals(); break;
             case 'drinks': await this.setupDrinks(); break;
             case 'recipes': await this.setupRecipes(); break;
             case 'ingredients': await this.setupIngredients(); break;
@@ -325,7 +357,6 @@ class App {
             case 'metrics': await this.setupMetrics(); break;
             case 'stats': await this.setupStats(); break;
             case 'preferences': await this.setupPreferences(); break;
-            case 'photo-results': await this.setupPhotoResults(); break;
         }
     }
 }

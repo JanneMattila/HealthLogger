@@ -30,12 +30,12 @@ class I18n {
         const targets = [];
         const isElement = typeof Element !== 'undefined' && root instanceof Element;
 
-        if (isElement && (root.hasAttribute('data-i18n') || root.hasAttribute('data-i18n-placeholder') || root.hasAttribute('data-i18n-title'))) {
+        if (isElement && (root.hasAttribute('data-i18n') || root.hasAttribute('data-i18n-placeholder') || root.hasAttribute('data-i18n-title') || root.hasAttribute('data-i18n-aria-label'))) {
             targets.push(root);
         }
 
         if (typeof root.querySelectorAll === 'function') {
-            targets.push(...root.querySelectorAll('[data-i18n], [data-i18n-placeholder], [data-i18n-title]'));
+            targets.push(...root.querySelectorAll('[data-i18n], [data-i18n-placeholder], [data-i18n-title], [data-i18n-aria-label]'));
         }
 
         targets.forEach(element => {
@@ -52,6 +52,11 @@ class I18n {
             const titleKey = element.getAttribute('data-i18n-title');
             if (titleKey) {
                 element.title = this.t(titleKey);
+            }
+
+            const ariaLabelKey = element.getAttribute('data-i18n-aria-label');
+            if (ariaLabelKey) {
+                element.setAttribute('aria-label', this.t(ariaLabelKey));
             }
         });
     }

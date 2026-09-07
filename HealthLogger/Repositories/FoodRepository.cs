@@ -181,13 +181,4 @@ public class FoodRepository
         }
     }
 
-    public async Task<List<FoodItemEntity>> FuzzyMatchAsync(string name, int limit = 5)
-    {
-        // Simple fuzzy: search both Finnish and English names
-        return await _db.FoodItems
-            .Where(f => EF.Functions.Like(f.NameFi, $"%{name}%") || 
-                        EF.Functions.Like(f.NameEn, $"%{name}%"))
-            .Take(limit)
-            .ToListAsync();
-    }
 }

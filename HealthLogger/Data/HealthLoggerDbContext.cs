@@ -15,7 +15,6 @@ public class HealthLoggerDbContext : DbContext
     public DbSet<RecipeIngredientEntity> RecipeIngredients => Set<RecipeIngredientEntity>();
     public DbSet<DailyCheckinEntity> DailyCheckins => Set<DailyCheckinEntity>();
     public DbSet<BodyMetricEntity> BodyMetrics => Set<BodyMetricEntity>();
-    public DbSet<FoodPhotoEntity> FoodPhotos => Set<FoodPhotoEntity>();
     public DbSet<UserPreferencesEntity> UserPreferences => Set<UserPreferencesEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -135,25 +134,6 @@ public class HealthLoggerDbContext : DbContext
                   .WithMany(u => u.BodyMetrics)
                   .HasForeignKey(e => e.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // FoodPhoto
-        modelBuilder.Entity<FoodPhotoEntity>(entity =>
-        {
-            entity.ToTable("FoodPhotos");
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.UserId);
-            entity.Property(e => e.FileName).IsRequired();
-            entity.Property(e => e.ContentType).IsRequired();
-            entity.Property(e => e.FilePath).IsRequired();
-            entity.HasOne(e => e.User)
-                  .WithMany(u => u.FoodPhotos)
-                  .HasForeignKey(e => e.UserId)
-                  .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(e => e.FoodEntry)
-                  .WithMany(fe => fe.Photos)
-                  .HasForeignKey(e => e.FoodEntryId)
-                  .OnDelete(DeleteBehavior.ClientSetNull);
         });
 
         // UserPreferences

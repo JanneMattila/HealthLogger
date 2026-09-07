@@ -15,6 +15,5 @@ public class UserEntity
     public List<CustomRecipeEntity> CustomRecipes { get; set; } = [];
     public List<DailyCheckinEntity> DailyCheckins { get; set; } = [];
     public List<BodyMetricEntity> BodyMetrics { get; set; } = [];
-    public List<FoodPhotoEntity> FoodPhotos { get; set; } = [];
     public UserPreferencesEntity? Preferences { get; set; }
 }

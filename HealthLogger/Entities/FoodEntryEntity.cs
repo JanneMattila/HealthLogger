@@ -15,5 +15,4 @@ public class FoodEntryEntity
     // Navigation
     public UserEntity User { get; set; } = null!;
     public List<FoodEntryItemEntity> Items { get; set; } = [];
-    public List<FoodPhotoEntity> Photos { get; set; } = [];
 }

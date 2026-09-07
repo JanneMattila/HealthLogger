@@ -124,9 +124,9 @@ public static class FoodEndpoints
             return Results.Created($"/api/foods/{created.Id}", created);
         });
 
-        group.MapGet("/search-online", async (string query, HealthLogger.Services.AiFoodRecognitionService aiService) =>
+        group.MapGet("/search-online", async (string query, NutritionSearchService nutritionSearch) =>
         {
-            var result = await aiService.SearchNutritionOnlineAsync(query);
+            var result = await nutritionSearch.SearchNutritionOnlineAsync(query);
             return Results.Ok(result);
         });
 

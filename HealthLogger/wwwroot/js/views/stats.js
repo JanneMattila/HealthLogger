@@ -3,8 +3,8 @@ Object.assign(App.prototype, {
     async setupStats() {
         let days = 7;
         const loadStats = async () => {
-            const to = new Date().toISOString().split('T')[0];
-            const from = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+            const to = this.getLocalDateValue();
+            const from = this.getLocalDateValue(new Date(Date.now() - days * 86400000));
             try {
                 const [calories, wellness, macros] = await Promise.all([
                     API.getCalorieTrend(from, to),

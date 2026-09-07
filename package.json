@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test": "node tests/run-tests.js"
+  },
   "dependencies": {
     "@zxing/browser": "0.2.1",
     "playwright": "^1.59.1"

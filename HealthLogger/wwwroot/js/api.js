@@ -50,6 +50,8 @@ const API = {
     // Entries
     getEntries: (date) => API.request('GET', `/api/entries?date=${date}`),
     createEntry: (entry) => API.request('POST', '/api/entries', entry),
+    createMeal: (meal) => API.request('POST', '/api/entries/meal', meal),
+    updateEntry: (entryId, entry) => API.request('PUT', `/api/entries/${entryId}`, entry),
     addEntryItem: (entryId, item) => API.request('POST', `/api/entries/${entryId}/items`, item),
     updateEntryItem: (entryId, itemId, item) => API.request('PUT', `/api/entries/${entryId}/items/${itemId}`, item),
     removeEntryItem: (entryId, itemId) => API.request('DELETE', `/api/entries/${entryId}/items/${itemId}`),
@@ -66,6 +68,7 @@ const API = {
         const qs = params.toString();
         return API.request('POST', `/api/recipes/add-to-entry/${entryId}/${recipeId}${qs ? '?' + qs : ''}`);
     },
+    addRecipeAsMeal: (recipeId, meal) => API.request('POST', `/api/recipes/${recipeId}/meal`, meal),
 
     // Check-ins
     getCheckin: (date) => API.request('GET', `/api/checkins?date=${date}`),
@@ -75,19 +78,6 @@ const API = {
     getMetrics: (from, to) => API.request('GET', `/api/metrics?from=${from}&to=${to}`),
     getLatestMetrics: () => API.request('GET', '/api/metrics/latest'),
     saveMetric: (metric) => API.request('POST', '/api/metrics', metric),
-
-    // Photos
-    analyzePhoto: async (file) => {
-        const formData = new FormData();
-        formData.append('photo', file);
-        const response = await fetch('/api/photos/analyze', {
-            method: 'POST',
-            body: formData,
-            credentials: 'same-origin'
-        });
-        if (!response.ok) throw new Error(`Photo analysis failed: ${response.status}`);
-        return response.json();
-    },
 
     // Stats
     getDashboard: () => API.request('GET', '/api/stats/dashboard'),

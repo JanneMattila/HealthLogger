@@ -17,6 +17,7 @@ class AuthManager {
     }
 
     showLogin() {
+        window.app?.dismissTransientOverlays();
         const welcomeDialog = document.getElementById('welcome-dialog');
         welcomeDialog.style.display = 'flex';
         document.getElementById('app-header')?.style.setProperty('display', 'none');

@@ -9,6 +9,7 @@ Object.assign(App.prototype, {
         let recipeIngredients = [];
         let editingRecipeId = null;
         let openRecipeEditor;
+        let recipeLoadSequence = 0;
 
         const showView = (view) => {
             [listView, createView, detailView].forEach(v => { if (v) v.style.display = 'none'; });
@@ -16,8 +17,22 @@ Object.assign(App.prototype, {
         };
 
         const loadRecipes = async () => {
+            const requestId = ++recipeLoadSequence;
+            const isCurrentRequest = () => requestId === recipeLoadSequence
+                && recipeList.isConnected
+                && document.getElementById('recipe-list') === recipeList
+                && this.currentPage === 'recipes';
+
+            recipeList.setAttribute('aria-busy', 'true');
+            recipeList.innerHTML = `
+                <div class="recipe-loading" role="status" aria-live="polite">
+                    <span class="spinner-small" aria-hidden="true"></span>
+                    <span>${this.t('loading')}</span>
+                </div>`;
             try {
                 const recipes = await API.getRecipes();
+                if (!isCurrentRequest()) return;
+                recipeList.removeAttribute('aria-busy');
                 if (!recipes || recipes.length === 0) {
                     recipeList.innerHTML = `<p class="empty">${this.t('no_recipes')}</p>`;
                     return;
@@ -87,6 +102,8 @@ Object.assign(App.prototype, {
                     });
                 });
             } catch (e) {
+                if (!isCurrentRequest()) return;
+                recipeList.removeAttribute('aria-busy');
                 recipeList.innerHTML = `<p class="empty">${this.t('error_loading_recipes')}</p>`;
             }
         };
@@ -528,7 +545,7 @@ Object.assign(App.prototype, {
         };
     },
 
-    showRecipePortionSelector(recipe, mealType = null, consumptionTime = null) {
+    showRecipePortionSelector(recipe, mealType = null, consumptionTime = null, mealDate = null) {
         const mealTypes = this.getMealTypes().map(value => ({ value, label: this.t(`meal_${value}`) }));
         let selectedMealType = mealTypes.some(item => item.value === mealType)
             ? mealType
@@ -700,13 +717,16 @@ Object.assign(App.prototype, {
                     : parseFloat(gramsInput.value);
             if (!Number.isFinite(value) || value <= 0) return;
             try {
-                const today = new Date().toISOString().split('T')[0];
                 const consumptionTime = overlay.querySelector('#recipe-consumption-time').value;
-                const entry = await API.createEntry({ entryDate: today, mealType: selectedMealType, consumptionTime: this.toApiConsumptionTime(consumptionTime) });
                 const opts = mode === 'grams'
                     ? { portionGrams: value }
                     : { portionMultiplier: mode === 'percent' ? value / 100 : value };
-                await API.addRecipeToEntry(entry.id, recipe.id, opts);
+                await API.addRecipeAsMeal(recipe.id, {
+                    entryDate: mealDate || this.getLocalDateValue(),
+                    mealType: selectedMealType,
+                    consumptionTime: this.toApiConsumptionTime(consumptionTime),
+                    ...opts
+                });
                 this.showToast(this.t('recipe_added'));
                 overlay.remove();
                 this.navigate('dashboard');

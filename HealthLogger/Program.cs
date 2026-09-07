@@ -212,12 +212,11 @@ builder.Services.AddScoped<EntryRepository>();
 builder.Services.AddScoped<RecipeRepository>();
 builder.Services.AddScoped<CheckinRepository>();
 builder.Services.AddScoped<MetricsRepository>();
-builder.Services.AddScoped<PhotoRepository>();
 
 // Register services
 builder.Services.AddScoped<StatsService>();
 builder.Services.AddScoped<ReportService>();
-builder.Services.AddScoped<AiFoodRecognitionService>();
+builder.Services.AddScoped<NutritionSearchService>();
 builder.Services.AddScoped<BarcodeFoodLookupService>();
 builder.Services.AddSingleton<LocalizationService>();
 
@@ -258,6 +257,29 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+var legacyPhotoDirectory = new DirectoryInfo(Path.GetFullPath(Path.Combine("data", "photos")));
+if (legacyPhotoDirectory.Exists)
+{
+    if (legacyPhotoDirectory.Attributes.HasFlag(FileAttributes.ReparsePoint))
+    {
+        app.Logger.LogWarning(
+            "Legacy photo directory {PhotoDirectory} is a link or junction; automatic cleanup was skipped",
+            legacyPhotoDirectory.FullName);
+    }
+    else
+    {
+        try
+        {
+            legacyPhotoDirectory.Delete(recursive: true);
+            app.Logger.LogInformation("Deleted legacy food-identification photos from {PhotoDirectory}", legacyPhotoDirectory.FullName);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Could not delete legacy food-identification photos from {PhotoDirectory}", legacyPhotoDirectory.FullName);
+        }
+    }
+}
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();
@@ -270,15 +292,14 @@ app.MapEntryEndpoints();
 app.MapRecipeEndpoints();
 app.MapCheckinEndpoints();
 app.MapMetricsEndpoints();
-app.MapPhotoEndpoints();
 app.MapStatsEndpoints();
 app.MapReportEndpoints();
 app.MapUserEndpoints();
 
 var spaRoutes = new[]
 {
-    "/today", "/drinks", "/recipes", "/ingredients", "/checkin",
-    "/metrics", "/stats", "/preferences", "/photo-results"
+    "/today", "/meals", "/meals/new", "/drinks", "/recipes", "/ingredients", "/checkin",
+    "/metrics", "/stats", "/preferences"
 };
 foreach (var route in spaRoutes)
 {

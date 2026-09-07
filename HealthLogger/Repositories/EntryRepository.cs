@@ -38,10 +38,48 @@ public class EntryRepository
         return entry;
     }
 
+    public async Task<FoodEntryEntity> CreateMealAsync(FoodEntryEntity entry, IEnumerable<FoodEntryItemEntity> items)
+    {
+        entry.Id = Guid.NewGuid();
+        entry.CreatedAt = DateTime.UtcNow;
+        entry.Items = items.Select(item =>
+        {
+            item.Id = Guid.NewGuid();
+            item.FoodEntryId = entry.Id;
+            item.CreatedAt = DateTime.UtcNow;
+            return item;
+        }).ToList();
+        entry.TotalCalories = entry.Items.Sum(item =>
+            item.CustomCalories ?? (item.FoodItem?.EnergyKcal * item.PortionGrams / 100.0 ?? 0));
+        foreach (var item in entry.Items)
+            item.FoodItem = null;
+        _db.FoodEntries.Add(entry);
+        await _db.SaveChangesAsync();
+        return entry;
+    }
+
     public async Task<FoodEntryEntity> UpdateAsync(FoodEntryEntity entry)
     {
         entry.UpdatedAt = DateTime.UtcNow;
         _db.FoodEntries.Update(entry);
+        await _db.SaveChangesAsync();
+        return entry;
+    }
+
+    public async Task<FoodEntryEntity?> UpdateDetailsAsync(
+        string userId, Guid entryId, DateOnly entryDate, TimeOnly consumptionTime, string mealType, string? notes)
+    {
+        var id = Guid.Parse(userId);
+        var entry = await _db.FoodEntries.AsTracking()
+            .Include(e => e.Items).ThenInclude(i => i.FoodItem)
+            .FirstOrDefaultAsync(e => e.Id == entryId && e.UserId == id);
+        if (entry is null) return null;
+
+        entry.EntryDate = entryDate;
+        entry.ConsumptionTime = consumptionTime;
+        entry.MealType = mealType;
+        entry.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        entry.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return entry;
     }
@@ -88,55 +126,17 @@ public class EntryRepository
     }
 
     public async Task<FoodEntryItemEntity?> UpdateItemAsync(
-        string userId, Guid entryId, Guid itemId, double portionGrams, string mealType)
+        string userId, Guid entryId, Guid itemId, double portionGrams)
     {
         var uid = Guid.Parse(userId);
         var item = await _db.FoodEntryItems.AsTracking()
             .Include(i => i.FoodEntry)
-            .Include(i => i.FoodItem)
             .FirstOrDefaultAsync(i => i.Id == itemId && i.FoodEntryId == entryId && i.FoodEntry.UserId == uid);
         if (item is null) return null;
 
-        var sourceEntry = item.FoodEntry;
-        var sourceEntryId = sourceEntry.Id;
         item.PortionGrams = portionGrams;
-
-        if (sourceEntry.MealType != mealType)
-        {
-            var targetEntry = await _db.FoodEntries.AsTracking()
-                .FirstOrDefaultAsync(e => e.UserId == uid &&
-                    e.EntryDate == sourceEntry.EntryDate && e.MealType == mealType);
-            if (targetEntry is null)
-            {
-                targetEntry = new FoodEntryEntity
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = uid,
-                    EntryDate = sourceEntry.EntryDate,
-                    MealType = mealType,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _db.FoodEntries.Add(targetEntry);
-            }
-
-            item.FoodEntry = targetEntry;
-            item.FoodEntryId = targetEntry.Id;
-        }
-
         await _db.SaveChangesAsync();
-
-        if (sourceEntryId != item.FoodEntryId)
-        {
-            if (await _db.FoodEntryItems.AnyAsync(i => i.FoodEntryId == sourceEntryId))
-                await RecalculateTotalCaloriesAsync(sourceEntryId);
-            else
-            {
-                _db.FoodEntries.Remove(sourceEntry);
-                await _db.SaveChangesAsync();
-            }
-        }
-
-        await RecalculateTotalCaloriesAsync(item.FoodEntryId);
+        await RecalculateTotalCaloriesAsync(entryId);
         return item;
     }
 

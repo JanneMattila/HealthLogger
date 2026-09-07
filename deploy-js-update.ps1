@@ -23,9 +23,9 @@ if ($swContent -match "const CACHE_VERSION = '([^']+)';") {
     # Update service worker version with timestamp
     $swContent = $swContent -replace "const CACHE_VERSION = '[^']+';", "const CACHE_VERSION = '$newVersion';"
     $swContent | Set-Content $swPath -NoNewline
-    Write-Host "✓ Updated service-worker.js" -ForegroundColor Green
+    Write-Host "[OK] Updated service-worker.js" -ForegroundColor Green
 } else {
-    Write-Host "✗ Could not find CACHE_VERSION in service-worker.js" -ForegroundColor Red
+    Write-Host "[ERROR] Could not find CACHE_VERSION in service-worker.js" -ForegroundColor Red
     exit 1
 }
 
@@ -39,7 +39,7 @@ foreach ($file in $htmlFiles) {
     $updated = $content -replace '\?v=\d+', "?v=$timestamp"
     if ($content -ne $updated) {
         $updated | Set-Content $file.FullName -NoNewline
-        Write-Host "✓ Updated $($file.Name)" -ForegroundColor Green
+        Write-Host "[OK] Updated $($file.Name)" -ForegroundColor Green
     }
 }
 
@@ -50,7 +50,7 @@ foreach ($file in $jsFiles) {
     $updated = $content -replace '\?v=\d+', "?v=$timestamp"
     if ($content -ne $updated) {
         $updated | Set-Content $file.FullName -NoNewline
-        Write-Host "✓ Updated $($file.Name)" -ForegroundColor Green
+        Write-Host "[OK] Updated $($file.Name)" -ForegroundColor Green
     }
 }
 
@@ -61,7 +61,7 @@ foreach ($file in $cssFiles) {
     $updated = $content -replace '\?v=\d+', "?v=$timestamp"
     if ($content -ne $updated) {
         $updated | Set-Content $file.FullName -NoNewline
-        Write-Host "✓ Updated $($file.Name)" -ForegroundColor Green
+        Write-Host "[OK] Updated $($file.Name)" -ForegroundColor Green
     }
 }
 

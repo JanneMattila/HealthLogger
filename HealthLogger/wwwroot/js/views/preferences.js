@@ -2,18 +2,8 @@
 Object.assign(App.prototype, {
     async setupPreferences() {
         const form = document.getElementById('preferences-form');
-        const notificationStatus = document.getElementById('notification-status');
         let reminderTimes = [];
         let ingredientCategories = ['Own'];
-
-        const renderNotificationStatus = () => {
-            if (!notificationStatus || !('Notification' in window)) {
-                if (notificationStatus) notificationStatus.textContent = this.t('notifications_unsupported');
-                return;
-            }
-            notificationStatus.textContent = this.t(`notification_permission_${Notification.permission}`);
-            notificationStatus.classList.toggle('error', Notification.permission === 'denied');
-        };
 
         const renderReminders = () => {
             const list = document.getElementById('reminder-times-list');
@@ -78,7 +68,6 @@ Object.assign(App.prototype, {
 
         renderReminders();
         renderIngredientCategories();
-        renderNotificationStatus();
 
         document.getElementById('btn-add-reminder')?.addEventListener('click', () => {
             const input = document.getElementById('new-reminder-time');
@@ -105,13 +94,7 @@ Object.assign(App.prototype, {
             const currentForm = e.target;
             const newLang = currentForm.language.value;
             try {
-                let enableNotifications = currentForm.enableNotifications.checked;
-                if (enableNotifications && 'Notification' in window && Notification.permission === 'default') {
-                    const permission = await Notification.requestPermission();
-                    enableNotifications = permission === 'granted';
-                    currentForm.enableNotifications.checked = enableNotifications;
-                    renderNotificationStatus();
-                }
+                const enableNotifications = currentForm.enableNotifications.checked;
                 await API.savePreferences({
                     language: newLang,
                     theme: currentForm.theme.value,

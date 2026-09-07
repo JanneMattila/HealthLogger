@@ -2,7 +2,7 @@
 Object.assign(App.prototype, {
     async setupDashboard() {
         try {
-            const today = new Date().toISOString().split('T')[0];
+            const today = this.getLocalDateValue();
             const [data, todayEntries] = await Promise.all([
                 API.getDashboard(),
                 API.getEntries(today)
@@ -50,13 +50,10 @@ Object.assign(App.prototype, {
 
             this.renderDashboardDrinks(todayEntries);
 
-            document.querySelector('[data-action="quick-meal"]')?.addEventListener('click', () => this.navigate('ingredients'));
+            document.querySelector('[data-action="quick-meal"]')?.addEventListener('click', () => this.navigate('add-meal'));
+            document.querySelector('[data-action="manage-meals"]')?.addEventListener('click', () => this.navigate('meals'));
             document.querySelector('[data-action="quick-drink"]')?.addEventListener('click', () => this.navigate('drinks'));
             document.querySelector('[data-action="quick-checkin"]')?.addEventListener('click', () => this.navigate('checkin'));
-            document.querySelector('[data-action="quick-photo"]')?.addEventListener('click', () => {
-                this.navigate('log-meal');
-                setTimeout(() => document.getElementById('btn-camera')?.click(), 300);
-            });
 
             if (data.weeklyCalorieTrend?.length > 0) {
                 const ctx = document.getElementById('chart-weekly-calories');
@@ -81,7 +78,7 @@ Object.assign(App.prototype, {
     },
 
     async refreshDashboardDrinks() {
-        const today = new Date().toISOString().split('T')[0];
+        const today = this.getLocalDateValue();
         this.renderDashboardDrinks(await API.getEntries(today));
     },
 

@@ -14,7 +14,7 @@ Object.assign(App.prototype, {
             });
         });
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = this.getLocalDateValue();
         try {
             const checkin = await API.getCheckin(today);
             if (checkin) {

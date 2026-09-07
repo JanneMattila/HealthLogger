@@ -15,6 +15,17 @@ const escapeIngredientHtml = value => String(value ?? '')
     .replaceAll("'", '&#39;');
 
 const ingredientNumber = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+let ingredientDialogSequence = 0;
+
+const getIngredientFocusTarget = () => document.activeElement instanceof HTMLElement
+    ? document.activeElement
+    : null;
+
+const restoreIngredientFocus = target => {
+    setTimeout(() => {
+        if (target?.isConnected) target.focus();
+    }, 0);
+};
 
 const updateIngredientReferences = (food, lang) => {
     const updateItems = items => items?.forEach(item => {
@@ -270,6 +281,9 @@ Object.assign(App.prototype, {
                 this.showIngredientDetail(food, lang);
             });
         });
+        document.getElementById('btn-manual-ingredient')?.addEventListener('click', event => {
+            this.showIngredientEditor(null, lang, { returnFocus: event.currentTarget });
+        });
 
         listEl.refreshIngredients = () => {
             favoriteFoodsPromise = null;
@@ -278,9 +292,22 @@ Object.assign(App.prototype, {
         await loadItems('');
     },
 
-    showIngredientDetail(food, lang) {
+    showIngredientDetail(food, lang, options = {}) {
         const name = lang === 'fi' ? (food.nameFi || food.nameEn) : (food.nameEn || food.nameFi);
         const secondary = lang === 'fi' ? food.nameEn : food.nameFi;
+        const returnFocus = options.returnFocus ?? getIngredientFocusTarget();
+        const dialogId = `ingredient-detail-${++ingredientDialogSequence}`;
+        const ids = {
+            title: `${dialogId}-title`,
+            favorite: `${dialogId}-favorite`,
+            nutrition: `${dialogId}-nutrition`,
+            defaultWeight: `${dialogId}-default-weight`,
+            unitWeight: `${dialogId}-unit-weight`,
+            amount: `${dialogId}-amount`,
+            unit: `${dialogId}-unit`,
+            consumptionTime: `${dialogId}-consumption-time`,
+            mealType: `${dialogId}-meal-type`
+        };
         let defaultPortionGrams = food.defaultPortionGrams || 100;
         let unitWeightGrams = food.unitWeightGrams > 0 ? Number(food.unitWeightGrams) : null;
         const portionPresets = [...new Set([defaultPortionGrams, 25, 50, 100, 250])].sort((left, right) => left - right);
@@ -292,16 +319,16 @@ Object.assign(App.prototype, {
         const overlay = document.createElement('div');
         overlay.className = 'portion-dialog';
         overlay.innerHTML = `
-            <div class="portion-content ingredient-detail" role="dialog" aria-modal="true" aria-labelledby="ingredient-detail-title">
+            <div class="portion-content ingredient-detail" role="dialog" aria-modal="true" aria-labelledby="${ids.title}">
                 <div class="portion-header">
-                    <h3 id="ingredient-detail-title">${escapeIngredientHtml(name)}</h3>
+                    <h3 class="ingredient-detail-title" id="${ids.title}">${escapeIngredientHtml(name)}</h3>
                     ${food.isUserCreated ? `<button class="btn btn-secondary btn-sm ingredient-edit-btn" type="button">${this.t('btn_edit')}</button>` : ''}
-                    <button class="btn-favorite ${isFavorite ? 'active' : ''}" id="btn-ingredient-favorite"
+                    <button class="btn-favorite btn-ingredient-favorite ${isFavorite ? 'active' : ''}" id="${ids.favorite}"
                             title="${this.t('toggle_favorite')}" aria-label="${this.t('toggle_favorite')}">${isFavorite ? '★' : '☆'}</button>
                 </div>
                 ${secondary && secondary !== name ? `<p class="ingredient-detail-secondary">${escapeIngredientHtml(secondary)}</p>` : ''}
                 ${food.category ? `<p class="ingredient-detail-category">${escapeIngredientHtml(food.category)}</p>` : ''}
-                <h4 id="ingredient-nutrition-heading"></h4>
+                <h4 class="ingredient-nutrition-heading" id="${ids.nutrition}"></h4>
                 <table class="nutrient-table">
                     <tr><td>${this.t('energy')}</td><td class="nutrient-value" data-nutrient="energy"></td></tr>
                     <tr><td>${this.t('protein_short')}</td><td class="nutrient-value" data-nutrient="protein"></td></tr>
@@ -316,55 +343,60 @@ Object.assign(App.prototype, {
                 <div class="ingredient-weight-settings">
                     <h4>${this.t('ingredient_weights_title')}</h4>
                     <div class="ingredient-weight-grid">
-                        <label for="ingredient-default-weight">${this.t('default_weight_grams')}</label>
-                        <input type="number" id="ingredient-default-weight" value="${defaultPortionGrams}" min="0.1" step="0.1" />
-                        <label for="ingredient-unit-weight">${this.t('unit_weight_grams')}</label>
-                        <input type="number" id="ingredient-unit-weight" value="${unitWeightGrams ?? ''}" min="0.1" step="0.1" />
+                        <label for="${ids.defaultWeight}">${this.t('default_weight_grams')}</label>
+                        <input type="number" id="${ids.defaultWeight}" value="${defaultPortionGrams}" min="0.1" step="0.1" />
+                        <label for="${ids.unitWeight}">${this.t('unit_weight_grams')}</label>
+                        <input type="number" id="${ids.unitWeight}" value="${unitWeightGrams ?? ''}" min="0.1" step="0.1" />
                     </div>
                     <button type="button" class="btn btn-secondary btn-sm ingredient-save-weights">${this.t('btn_save')}</button>
                 </div>
                 <div class="ingredient-consumption">
                     <h4>${this.t('add_as_consumption')}</h4>
-                    <label for="ingredient-portion-amount">${this.t('ingredient_amount_label')}</label>
+                    <label for="${ids.amount}">${this.t('ingredient_amount_label')}</label>
                     <div class="ingredient-amount-row">
-                        <input type="number" id="ingredient-portion-amount" value="${unitWeightGrams ? 1 : defaultPortionGrams}" min="0.1" step="0.1" />
-                        <select id="ingredient-portion-unit">
+                        <input class="ingredient-portion-amount" type="number" id="${ids.amount}" value="${unitWeightGrams ? 1 : defaultPortionGrams}" min="0.1" step="0.1" />
+                        <label class="visually-hidden" for="${ids.unit}">${this.t('unit_singular')}</label>
+                        <select id="${ids.unit}">
                             <option value="g">${this.t('unit_grams')}</option>
                             <option value="unit" ${unitWeightGrams ? 'selected' : 'disabled'}>${this.t('unit_singular')}</option>
                         </select>
                     </div>
                     <div class="ingredient-portion-presets">
                     </div>
-                    <div class="consumption-time-field">
-                        <label for="ingredient-consumption-time">${this.t('consumption_time')}</label>
-                        <input type="time" id="ingredient-consumption-time" value="${this.getCurrentTimeValue()}" step="60" />
+                    ${options.onAdd ? '' : `<div class="consumption-time-field">
+                        <label for="${ids.consumptionTime}">${this.t('consumption_time')}</label>
+                        <input type="time" id="${ids.consumptionTime}" value="${this.getCurrentTimeValue()}" step="60" />
                     </div>
                     <div class="ingredient-meal-field">
-                        <label for="ingredient-meal-type">${this.t('meal_type_label')}</label>
-                        <select id="ingredient-meal-type">
+                        <label for="${ids.mealType}">${this.t('meal_type_label')}</label>
+                        <select id="${ids.mealType}">
                             ${this.getMealTypes().map(mealType => `
                                 <option value="${mealType}" ${mealType === estimatedMealType ? 'selected' : ''}>${this.t(`meal_${mealType}`)}</option>
                             `).join('')}
                         </select>
-                    </div>
+                    </div>`}
                     <button type="button" class="btn btn-primary ingredient-add-btn">${this.t('btn_add')}</button>
                 </div>
                 <button class="btn btn-secondary ingredient-close-btn">${this.t('btn_close')}</button>
             </div>
         `;
         document.body.appendChild(overlay);
-        this.dismissOverlayOnClickOutside(overlay);
+        const closeDetail = (restoreFocus = true) => {
+            overlay.remove();
+            if (restoreFocus) restoreIngredientFocus(returnFocus);
+        };
+        this.dismissOverlayOnClickOutside(overlay, closeDetail);
 
         overlay.querySelector('.ingredient-edit-btn')?.addEventListener('click', () => {
-            overlay.remove();
-            this.showIngredientEditor(food, lang);
+            closeDetail(false);
+            this.showIngredientEditor(food, lang, { ...options, returnFocus });
         });
 
-        const amountInput = overlay.querySelector('#ingredient-portion-amount');
-        const unitSelect = overlay.querySelector('#ingredient-portion-unit');
+        const amountInput = overlay.querySelector(`#${ids.amount}`);
+        const unitSelect = overlay.querySelector(`#${ids.unit}`);
         const unitOption = unitSelect.querySelector('option[value="unit"]');
-        const defaultWeightInput = overlay.querySelector('#ingredient-default-weight');
-        const unitWeightInput = overlay.querySelector('#ingredient-unit-weight');
+        const defaultWeightInput = overlay.querySelector(`#${ids.defaultWeight}`);
+        const unitWeightInput = overlay.querySelector(`#${ids.unitWeight}`);
         const getPortionGrams = () => {
             const amount = parseFloat(amountInput.value);
             if (!Number.isFinite(amount) || amount <= 0) return 0;
@@ -393,7 +425,7 @@ Object.assign(App.prototype, {
         const updateNutritionTable = () => {
             const portionGrams = getPortionGrams();
             const nutrition = getNutrition(portionGrams);
-            overlay.querySelector('#ingredient-nutrition-heading').textContent = this.t('nutrition_for_portion', { amount: fmt(portionGrams) });
+            overlay.querySelector(`#${ids.nutrition}`).textContent = this.t('nutrition_for_portion', { amount: fmt(portionGrams) });
             overlay.querySelector('[data-nutrient="energy"]').textContent = `${Math.round(nutrition.energyKcal || 0)} kcal${nutrition.energyKj ? ` / ${Math.round(nutrition.energyKj)} kJ` : ''}`;
             ['protein', 'fat', 'saturatedFat', 'carbohydrate', 'sugar', 'fiber', 'salt'].forEach(nutrient => {
                 overlay.querySelector(`[data-nutrient="${nutrient}"]`).textContent = `${fmt(nutrition[nutrient])} g`;
@@ -457,7 +489,7 @@ Object.assign(App.prototype, {
         renderPortionPresets();
         updateNutritionTable();
 
-        const favoriteButton = overlay.querySelector('#btn-ingredient-favorite');
+        const favoriteButton = overlay.querySelector('.btn-ingredient-favorite');
         favoriteButton.addEventListener('click', () => {
             this.toggleFavorite({
                 id: food.id,
@@ -473,29 +505,34 @@ Object.assign(App.prototype, {
             favoriteButton.classList.toggle('active', nowFavorite);
         });
 
-        overlay.querySelector('.ingredient-close-btn').addEventListener('click', () => overlay.remove());
-        const consumptionTimeInput = overlay.querySelector('#ingredient-consumption-time');
-        const mealTypeSelect = overlay.querySelector('#ingredient-meal-type');
-        consumptionTimeInput.addEventListener('change', () => {
+        overlay.querySelector('.ingredient-close-btn').addEventListener('click', closeDetail);
+        const consumptionTimeInput = overlay.querySelector(`#${ids.consumptionTime}`);
+        const mealTypeSelect = overlay.querySelector(`#${ids.mealType}`);
+        consumptionTimeInput?.addEventListener('change', () => {
             const [hours, minutes] = consumptionTimeInput.value.split(':').map(Number);
             if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return;
             const selectedTime = new Date();
             selectedTime.setHours(hours, minutes, 0, 0);
             mealTypeSelect.value = this.getEstimatedMealType(selectedTime);
         });
-        overlay.querySelector('.ingredient-add-btn').addEventListener('click', () => {
+        overlay.querySelector('.ingredient-add-btn').addEventListener('click', event => {
             const portionGrams = getPortionGrams();
             if (portionGrams <= 0) return;
-            const mealType = mealTypeSelect.value;
             const nutrition = getNutrition(portionGrams);
+            const mealContext = options.getMealContext?.() || {};
+            const mealType = mealContext.mealType || mealTypeSelect.value;
+            const consumptionTime = mealContext.consumptionTime || consumptionTimeInput.value;
             const confirmation = document.createElement('div');
+            const confirmationId = `ingredient-confirmation-${++ingredientDialogSequence}`;
+            const confirmationTitleId = `${confirmationId}-title`;
+            const confirmationReturnFocus = event.currentTarget;
             confirmation.className = 'portion-dialog ingredient-confirmation';
             confirmation.innerHTML = `
-                <div class="portion-content ingredient-confirmation-content">
-                    <h3>${this.t('confirm_ingredient_add')}</h3>
+                <div class="portion-content ingredient-confirmation-content" role="dialog" aria-modal="true" aria-labelledby="${confirmationTitleId}">
+                    <h3 id="${confirmationTitleId}">${this.t('confirm_ingredient_add')}</h3>
                     <div class="ingredient-confirmation-summary">
                         <strong>${escapeIngredientHtml(name)}</strong>
-                        <span>${this.t(`meal_${mealType}`)} · ${consumptionTimeInput.value} · ${fmt(portionGrams)} g</span>
+                        <span>${this.t(`meal_${mealType}`)} · ${consumptionTime} · ${fmt(portionGrams)} g</span>
                     </div>
                     <table class="nutrient-table">
                         <tr><td>${this.t('energy')}</td><td class="nutrient-value">${Math.round(nutrition.energyKcal || 0)} kcal${nutrition.energyKj ? ` / ${Math.round(nutrition.energyKj)} kJ` : ''}</td></tr>
@@ -509,64 +546,98 @@ Object.assign(App.prototype, {
                     </div>
                 </div>`;
             document.body.appendChild(confirmation);
-            this.dismissOverlayOnClickOutside(confirmation);
-            confirmation.querySelector('.ingredient-confirm-cancel').addEventListener('click', () => confirmation.remove());
+            const closeConfirmation = (restoreFocus = true) => {
+                confirmation.remove();
+                if (restoreFocus) restoreIngredientFocus(confirmationReturnFocus);
+            };
+            this.dismissOverlayOnClickOutside(confirmation, closeConfirmation);
+            const confirmationCancel = confirmation.querySelector('.ingredient-confirm-cancel');
+            confirmationCancel.addEventListener('click', closeConfirmation);
             confirmation.querySelector('.ingredient-confirm-add').addEventListener('click', async () => {
                 const confirmationButtons = confirmation.querySelectorAll('button');
                 confirmationButtons.forEach(item => { item.disabled = true; });
+                if (options.onAdd) {
+                    options.onAdd({ food, name, portionGrams, nutrition });
+                    closeConfirmation(false);
+                    closeDetail();
+                    return;
+                }
                 try {
-                    const today = new Date().toISOString().split('T')[0];
-                    const entry = await API.createEntry({ entryDate: today, mealType, consumptionTime: this.toApiConsumptionTime(consumptionTimeInput.value) });
+                    const today = this.getLocalDateValue();
+                    const entry = await API.createEntry({ entryDate: today, mealType, consumptionTime: this.toApiConsumptionTime(consumptionTime) });
                     await API.addEntryItem(entry.id, { foodItemId: food.id, portionGrams });
                     this.saveRecentFoods([{ id: food.id, name, calories: nutrition.energyKcal, portion: portionGrams }]);
-                    confirmation.remove();
-                    overlay.remove();
+                    closeConfirmation(false);
+                    closeDetail();
                     this.showToast(this.t('ingredient_consumption_added'));
                 } catch (e) {
                     confirmationButtons.forEach(item => { item.disabled = false; });
                     this.showToast(this.t('add_failed'), 'error');
                 }
             });
+            confirmationCancel.focus();
         });
+        amountInput.focus();
     },
 
-    async showIngredientEditor(food, lang) {
+    async showIngredientEditor(food, lang, options = {}) {
+        const isCreate = !food;
+        food ??= {};
+        const returnFocus = options.returnFocus ?? getIngredientFocusTarget();
+        const dialogId = `ingredient-editor-${++ingredientDialogSequence}`;
+        const ids = {
+            title: `${dialogId}-title`,
+            nameFi: `${dialogId}-name-fi`,
+            nameEn: `${dialogId}-name-en`,
+            category: `${dialogId}-category`,
+            defaultWeight: `${dialogId}-default-weight`,
+            unitWeight: `${dialogId}-unit-weight`,
+            energyKcal: `${dialogId}-energy-kcal`,
+            energyKj: `${dialogId}-energy-kj`,
+            protein: `${dialogId}-protein`,
+            fat: `${dialogId}-fat`,
+            saturatedFat: `${dialogId}-saturated-fat`,
+            carbohydrate: `${dialogId}-carbohydrate`,
+            sugar: `${dialogId}-sugar`,
+            fiber: `${dialogId}-fiber`,
+            salt: `${dialogId}-salt`
+        };
         const overlay = document.createElement('div');
         overlay.className = 'portion-dialog';
         overlay.innerHTML = `
-            <div class="portion-content ingredient-editor" role="dialog" aria-modal="true" aria-labelledby="ingredient-editor-title">
-                <h3 id="ingredient-editor-title">${this.t('edit_ingredient_title')}</h3>
+            <div class="portion-content ingredient-editor" role="dialog" aria-modal="true" aria-labelledby="${ids.title}">
+                <h3 class="ingredient-editor-title" id="${ids.title}">${this.t(isCreate ? 'add_ingredient_title' : 'edit_ingredient_title')}</h3>
                 <form class="ingredient-edit-form">
                     <div class="barcode-name-grid">
-                        <div class="nutrition-input"><label>${this.t('ingredient_name_fi')}</label><input name="nameFi" /></div>
-                        <div class="nutrition-input"><label>${this.t('ingredient_name_en')}</label><input name="nameEn" /></div>
+                        <div class="nutrition-input"><label for="${ids.nameFi}">${this.t('ingredient_name_fi')}</label><input id="${ids.nameFi}" name="nameFi" /></div>
+                        <div class="nutrition-input"><label for="${ids.nameEn}">${this.t('ingredient_name_en')}</label><input id="${ids.nameEn}" name="nameEn" /></div>
                     </div>
                     <div class="nutrition-input ingredient-category-editor">
-                        <label for="ingredient-edit-category">${this.t('ingredient_category')}</label>
-                        <select id="ingredient-edit-category" name="category">
+                        <label for="${ids.category}">${this.t('ingredient_category')}</label>
+                        <select id="${ids.category}" name="category">
                             <option value="">${this.t('all_categories')}</option>
                         </select>
                     </div>
                     <div class="ingredient-weight-settings">
                         <h4>${this.t('ingredient_weights_title')}</h4>
                         <div class="ingredient-weight-grid">
-                            <label for="ingredient-edit-default-weight">${this.t('default_weight_grams')}</label>
-                            <input id="ingredient-edit-default-weight" type="number" inputmode="decimal" name="defaultPortionGrams" min="0.1" step="0.1" required />
-                            <label for="ingredient-edit-unit-weight">${this.t('unit_weight_grams')}</label>
-                            <input id="ingredient-edit-unit-weight" type="number" inputmode="decimal" name="unitWeightGrams" min="0.1" step="0.1" />
+                            <label for="${ids.defaultWeight}">${this.t('default_weight_grams')}</label>
+                            <input id="${ids.defaultWeight}" type="number" inputmode="decimal" name="defaultPortionGrams" min="0.1" step="0.1" required />
+                            <label for="${ids.unitWeight}">${this.t('unit_weight_grams')}</label>
+                            <input id="${ids.unitWeight}" type="number" inputmode="decimal" name="unitWeightGrams" min="0.1" step="0.1" />
                         </div>
                     </div>
                     <h4>${this.t('per_100g')}</h4>
                     <div class="manual-nutrition-grid">
-                        <div class="nutrition-input"><label>kcal</label><input type="number" inputmode="decimal" name="energyKcal" min="0" step="0.01" /></div>
-                        <div class="nutrition-input"><label>kJ</label><input type="number" inputmode="decimal" name="energyKj" min="0" step="0.01" /></div>
-                        <div class="nutrition-input"><label>${this.t('protein_short')}</label><input type="number" inputmode="decimal" name="protein" min="0" step="0.01" /></div>
-                        <div class="nutrition-input"><label>${this.t('fat_short')}</label><input type="number" inputmode="decimal" name="fat" min="0" step="0.01" /></div>
-                        <div class="nutrition-input"><label>${this.t('saturated_fat')}</label><input type="number" inputmode="decimal" name="saturatedFat" min="0" step="0.01" /></div>
-                        <div class="nutrition-input"><label>${this.t('carbs_short')}</label><input type="number" inputmode="decimal" name="carbohydrate" min="0" step="0.01" /></div>
-                        <div class="nutrition-input"><label>${this.t('sugar')}</label><input type="number" inputmode="decimal" name="sugar" min="0" step="0.01" /></div>
-                        <div class="nutrition-input"><label>${this.t('fiber_short')}</label><input type="number" inputmode="decimal" name="fiber" min="0" step="0.01" /></div>
-                        <div class="nutrition-input"><label>${this.t('salt')}</label><input type="number" inputmode="decimal" name="salt" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label for="${ids.energyKcal}">kcal</label><input id="${ids.energyKcal}" type="number" inputmode="decimal" name="energyKcal" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label for="${ids.energyKj}">kJ</label><input id="${ids.energyKj}" type="number" inputmode="decimal" name="energyKj" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label for="${ids.protein}">${this.t('protein_short')}</label><input id="${ids.protein}" type="number" inputmode="decimal" name="protein" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label for="${ids.fat}">${this.t('fat_short')}</label><input id="${ids.fat}" type="number" inputmode="decimal" name="fat" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label for="${ids.saturatedFat}">${this.t('saturated_fat')}</label><input id="${ids.saturatedFat}" type="number" inputmode="decimal" name="saturatedFat" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label for="${ids.carbohydrate}">${this.t('carbs_short')}</label><input id="${ids.carbohydrate}" type="number" inputmode="decimal" name="carbohydrate" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label for="${ids.sugar}">${this.t('sugar')}</label><input id="${ids.sugar}" type="number" inputmode="decimal" name="sugar" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label for="${ids.fiber}">${this.t('fiber_short')}</label><input id="${ids.fiber}" type="number" inputmode="decimal" name="fiber" min="0" step="0.01" /></div>
+                        <div class="nutrition-input"><label for="${ids.salt}">${this.t('salt')}</label><input id="${ids.salt}" type="number" inputmode="decimal" name="salt" min="0" step="0.01" /></div>
                     </div>
                     <p class="ingredient-edit-status" role="status" aria-live="polite"></p>
                     <div class="portion-buttons">
@@ -576,7 +647,11 @@ Object.assign(App.prototype, {
                 </form>
             </div>`;
         document.body.appendChild(overlay);
-        this.dismissOverlayOnClickOutside(overlay);
+        const closeEditor = (restoreFocus = true) => {
+            overlay.remove();
+            if (restoreFocus) restoreIngredientFocus(returnFocus);
+        };
+        this.dismissOverlayOnClickOutside(overlay, closeEditor);
 
         const form = overlay.querySelector('.ingredient-edit-form');
         const status = overlay.querySelector('.ingredient-edit-status');
@@ -600,35 +675,43 @@ Object.assign(App.prototype, {
         });
         form.elements.nameFi.focus();
 
-        const categorySelect = form.elements.category;
-        try {
-            let categories = _ingredientsCache.categories;
-            if (!categories) {
-                categories = await API.getFoodCategories();
-                _ingredientsCache.categories = categories;
-            }
-            const currentCategory = food.category?.trim();
-            if (currentCategory && !categories.includes(currentCategory)) categories = [...categories, currentCategory];
-            categories.forEach(category => {
-                const option = document.createElement('option');
-                option.value = category;
-                option.textContent = category;
-                categorySelect.appendChild(option);
-            });
-            categorySelect.value = currentCategory || '';
-        } catch {
-            if (food.category) {
-                categorySelect.add(new Option(food.category, food.category));
-                categorySelect.value = food.category;
-            }
-        }
-        this.enhanceSelectWithSearch(categorySelect);
-
         const closeAndReopen = () => {
-            overlay.remove();
-            this.showIngredientDetail(food, lang);
+            if (isCreate) {
+                closeEditor();
+            } else {
+                closeEditor(false);
+                this.showIngredientDetail(food, lang, { ...options, returnFocus });
+            }
         };
         form.querySelector('.ingredient-edit-cancel').addEventListener('click', closeAndReopen);
+
+        const categorySelect = form.elements.category;
+        const loadCategories = async () => {
+            try {
+                let categories = _ingredientsCache.categories;
+                if (!categories) {
+                    categories = await API.getFoodCategories();
+                    _ingredientsCache.categories = categories;
+                }
+                const currentCategory = food.category?.trim();
+                if (currentCategory && !categories.includes(currentCategory)) categories = [...categories, currentCategory];
+                categories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category;
+                    option.textContent = category;
+                    categorySelect.appendChild(option);
+                });
+                categorySelect.value = currentCategory || '';
+            } catch {
+                if (food.category) {
+                    categorySelect.add(new Option(food.category, food.category));
+                    categorySelect.value = food.category;
+                }
+            }
+            this.enhanceSelectWithSearch(categorySelect);
+        };
+        loadCategories();
+
         form.addEventListener('submit', async event => {
             event.preventDefault();
             const nameFi = form.elements.nameFi.value.trim();
@@ -670,14 +753,16 @@ Object.assign(App.prototype, {
             status.textContent = '';
             status.classList.remove('error');
             try {
-                const updatedFood = await API.updateFood(food.id, updatedValues);
+                const updatedFood = isCreate
+                    ? await API.createFood(updatedValues)
+                    : await API.updateFood(food.id, updatedValues);
                 Object.assign(food, updatedFood);
                 updateIngredientReferences(food, lang);
                 _ingredientsCache.clear();
                 document.getElementById('ingredients-list')?.refreshIngredients?.();
                 this.showToast(this.t('ingredient_saved'));
-                overlay.remove();
-                this.showIngredientDetail(food, lang);
+                closeEditor(false);
+                this.showIngredientDetail(food, lang, { ...options, returnFocus });
             } catch {
                 status.textContent = this.t('toast_save_failed');
                 status.classList.add('error');
