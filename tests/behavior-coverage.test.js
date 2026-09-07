@@ -131,8 +131,8 @@ async function testDrinkSelectionAndSharedConfirmation(browser) {
 
 async function testIngredientBarcodeAction(browser) {
     for (const locale of [
-        { lang: 'en', label: 'Add' },
-        { lang: 'fi', label: 'Lisää' }
+        { lang: 'en', label: 'Add', manualLabel: 'Manual entry' },
+        { lang: 'fi', label: 'Lisää', manualLabel: 'Syötä käsin' }
     ]) {
         const { context, page } = await openPage(browser);
         try {
@@ -143,15 +143,12 @@ async function testIngredientBarcodeAction(browser) {
             await navigate(page, 'ingredients', '.ingredients');
 
             const barcodeButton = page.locator('#btn-barcode-ingredient');
-            const manualButton = page.locator('#btn-manual-ingredient');
             assert((await barcodeButton.textContent()).trim() === locale.label,
                 `task 8: ingredients barcode action is localized as "${locale.label}" in ${locale.lang}`);
             assert(await barcodeButton.evaluate(element => element.classList.contains('btn-barcode')),
                 `task 8: localized ${locale.lang} control retains its barcode action identity`);
-            assert(await barcodeButton.evaluate((element, manual) =>
-                Boolean(element.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING),
-            await manualButton.elementHandle()),
-            `task 8: ingredients barcode action precedes manual entry in ${locale.lang}`);
+            assert(await page.locator('#btn-manual-ingredient').count() === 0,
+                `ingredients page has one Add action in ${locale.lang}`);
 
             await barcodeButton.click();
             const barcodeDialog = page.locator('.barcode-dialog');
@@ -159,6 +156,10 @@ async function testIngredientBarcodeAction(browser) {
             assert(await barcodeDialog.locator('.barcode-camera-btn').isVisible()
                 && await barcodeDialog.locator('.barcode-lookup-form').isVisible(),
             `task 8: localized ${locale.lang} barcode action opens camera and manual EAN controls`);
+            assert(await barcodeDialog.locator('.barcode-manual-ingredient-btn').isVisible(),
+                `Add dialog includes manual ingredient entry in ${locale.lang}`);
+            assert((await barcodeDialog.locator('.barcode-manual-ingredient-btn').textContent()).trim() === locale.manualLabel,
+                `manual ingredient entry is localized in ${locale.lang}`);
             assert(await barcodeDialog.evaluate(dialog => {
                 const camera = dialog.querySelector('.barcode-camera-btn');
                 const manual = dialog.querySelector('.barcode-lookup-form');
@@ -183,7 +184,8 @@ async function testManualIngredientCreation(browser) {
             };
         });
         await navigate(page, 'ingredients', '.ingredients');
-        await page.locator('#btn-manual-ingredient').click();
+        await page.locator('#btn-barcode-ingredient').click();
+        await page.locator('.barcode-manual-ingredient-btn').click();
         const form = page.locator('.ingredient-edit-form');
         await form.locator('[name="nameEn"]').fill('Manual oats');
         await form.locator('[name="category"]').selectOption('Own');

@@ -274,15 +274,15 @@ Object.assign(App.prototype, {
             }, 300);
         });
 
-        document.getElementById('btn-barcode-ingredient')?.addEventListener('click', () => {
+        document.getElementById('btn-barcode-ingredient')?.addEventListener('click', event => {
+            const returnFocus = event.currentTarget;
             this.showBarcodeDialog(food => {
                 _ingredientsCache.clear();
                 this.showToast(this.t('barcode_food_saved'));
                 this.showIngredientDetail(food, lang);
+            }, {
+                onManualEntry: () => this.showIngredientEditor(null, lang, { returnFocus })
             });
-        });
-        document.getElementById('btn-manual-ingredient')?.addEventListener('click', event => {
-            this.showIngredientEditor(null, lang, { returnFocus: event.currentTarget });
         });
 
         listEl.refreshIngredients = () => {

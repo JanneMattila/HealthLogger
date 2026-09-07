@@ -87,9 +87,25 @@ async function assertDialogSemantics(page, dialogSelector, expectedFocusSelector
             API.getFoodCategories = async () => [];
             API.browseFoods = async () => [];
             API.getRecipes = async () => [];
-            API.createMeal = async () => ({ id: 'navigation-test-meal' });
+            const entries = [];
+            API.getEntries = async () => entries;
+            API.createMeal = async meal => {
+                const entry = { ...meal, id: 'navigation-test-meal' };
+                entries.push(entry);
+                return entry;
+            };
             window.app.init();
         });
+
+        const authenticatedPages = await page.locator('.nav-item').evaluateAll(items =>
+            items.map(item => item.dataset.page));
+        for (const authenticatedPage of authenticatedPages) {
+            await page.locator('#nav-toggle').click();
+            await page.locator(`.nav-item[data-page="${authenticatedPage}"]`).click();
+            await page.waitForFunction(pageName => window.app.currentPage === pageName, authenticatedPage);
+            await assertHamburgerAvailable(page, `hamburger is available on ${authenticatedPage}`);
+        }
+
         await page.evaluate(() => window.app.navigate('add-meal'));
         await page.locator('.add-meal-page').waitFor({ state: 'visible' });
         await assertHamburgerAvailable(page, 'hamburger is available on Add Meal at mobile width');
@@ -111,12 +127,13 @@ async function assertDialogSemantics(page, dialogSelector, expectedFocusSelector
         assert(await page.locator('#btn-barcode-meal').evaluate(button => button === document.activeElement), 'ingredient detail close restores opener focus');
 
         await page.evaluate(() => window.app.navigate('ingredients'));
-        await page.locator('#btn-manual-ingredient').waitFor({ state: 'visible' });
-        await page.locator('#btn-manual-ingredient').click();
+    await page.locator('#btn-barcode-ingredient').waitFor({ state: 'visible' });
+    await page.locator('#btn-barcode-ingredient').click();
+    await page.locator('.barcode-manual-ingredient-btn').click();
         await assertDialogSemantics(page, '.ingredient-editor[role="dialog"]', '.ingredient-editor [name="nameFi"]');
         await page.locator('.ingredient-edit-cancel').click();
-        await page.waitForFunction(() => document.activeElement?.id === 'btn-manual-ingredient');
-        assert(await page.locator('#btn-manual-ingredient').evaluate(button => button === document.activeElement), 'manual editor cancel restores opener focus');
+    await page.waitForFunction(() => document.activeElement?.id === 'btn-barcode-ingredient');
+    assert(await page.locator('#btn-barcode-ingredient').evaluate(button => button === document.activeElement), 'manual editor cancel restores Add button focus');
         await page.evaluate(() => window.app.navigate('add-meal'));
         await page.locator('.add-meal-page').waitFor({ state: 'visible' });
 
@@ -143,8 +160,30 @@ async function assertDialogSemantics(page, dialogSelector, expectedFocusSelector
 
         await page.locator('#btn-save-meal').click();
         await page.locator('#content .meals-page').waitFor({ state: 'visible' });
+        await page.locator('.meal-card-header').waitFor({ state: 'visible' });
         assert(await page.evaluate(() => window.app.currentPage) === 'meals', 'saving the meal leaves Add Meal');
         await assertHamburgerAvailable(page, 'hamburger remains available after saving the meal');
+        for (const width of [390, 1024]) {
+            await page.setViewportSize({ width, height: 844 });
+            const headerLayout = await page.locator('.meal-card-header').evaluate(header => {
+                const card = header.closest('.meal-card').getBoundingClientRect();
+                const rect = header.getBoundingClientRect();
+                return {
+                    position: getComputedStyle(header).position,
+                    insideCard: rect.top >= card.top && rect.bottom <= card.bottom
+                        && rect.left >= card.left && rect.right <= card.right,
+                    appHeaderPosition: getComputedStyle(document.getElementById('app-header')).position
+                };
+            });
+            assert(headerLayout.position === 'static' && headerLayout.insideCard, `saved meal header stays inside its card at ${width}px`);
+            assert(headerLayout.appHeaderPosition === 'fixed', `app header remains fixed at ${width}px`);
+            await assertHamburgerAvailable(page, `hamburger remains available with saved meals at ${width}px`);
+        }
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.locator('#nav-toggle').click();
+        await page.locator('.nav-item[data-page="dashboard"]').click();
+        await page.waitForFunction(() => window.app.currentPage === 'dashboard');
+        await assertHamburgerAvailable(page, 'hamburger navigates successfully after saving a meal');
 
         await page.evaluate(() => window.app.navigate('add-meal'));
         await page.locator('#content .add-meal-page').waitFor({ state: 'visible' });

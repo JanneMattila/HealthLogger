@@ -98,7 +98,7 @@ body {
 .btn-icon { background: none; border: 1px solid var(--border); border-radius: 8px; font-size: 1.2rem; padding: 0.5rem; }
 
 /* Header */
-header {
+#app-header {
     height: var(--header-height);
     background: var(--primary);
     color: white;
@@ -114,7 +114,7 @@ header {
     z-index: 100;
 }
 
-header h1 {
+#app-header h1 {
     font-size: 20px;
     font-weight: 500;
     margin: 0;
@@ -767,7 +767,8 @@ input[type="date"], input[type="time"] {
 .barcode-lookup-form h4 { margin: 0 0 0.75rem; font-size: 0.85rem; color: var(--text-secondary); text-transform: uppercase; }
 .barcode-entry-row { display: flex; gap: 0.5rem; margin: 0.25rem 0 0.75rem; }
 .barcode-entry-row input { flex: 1; min-width: 0; }
-.barcode-camera-btn { width: 100%; }
+.barcode-camera-btn, .barcode-manual-ingredient-btn { width: 100%; }
+.barcode-manual-ingredient-btn { margin-top: 0.75rem; }
 .barcode-camera { margin-top: 1rem; text-align: center; }
 .barcode-camera video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; background: #111; }
 .barcode-camera p { color: var(--text-secondary); font-size: 0.85rem; }

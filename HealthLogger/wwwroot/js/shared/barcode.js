@@ -1,5 +1,5 @@
 Object.assign(App.prototype, {
-    showBarcodeDialog(onAccepted) {
+    showBarcodeDialog(onAccepted, options = {}) {
         const overlay = document.createElement('div');
         overlay.className = 'portion-dialog';
         overlay.innerHTML = `
@@ -7,6 +7,7 @@ Object.assign(App.prototype, {
                 <h3>${this.t('barcode_title')}</h3>
                 <p class="barcode-help">${this.t('barcode_help')}</p>
                 <button type="button" class="btn btn-primary barcode-camera-btn">${this.t('barcode_use_camera')}</button>
+                ${options.onManualEntry ? `<button type="button" class="btn btn-secondary barcode-manual-ingredient-btn">${this.t('ingredient_manual_entry')}</button>` : ''}
                 <div class="barcode-camera" hidden>
                     <video playsinline muted></video>
                     <p>${this.t('barcode_camera_hint')}</p>
@@ -27,6 +28,7 @@ Object.assign(App.prototype, {
         const input = overlay.querySelector('#barcode-value');
         const lookupForm = overlay.querySelector('.barcode-lookup-form');
         const cameraButton = overlay.querySelector('.barcode-camera-btn');
+        const manualIngredientButton = overlay.querySelector('.barcode-manual-ingredient-btn');
         const cameraContainer = overlay.querySelector('.barcode-camera');
         const video = cameraContainer.querySelector('video');
         const status = overlay.querySelector('.barcode-status');
@@ -49,6 +51,10 @@ Object.assign(App.prototype, {
             overlay.remove();
         };
         this.dismissOverlayOnClickOutside(overlay, close);
+        manualIngredientButton?.addEventListener('click', () => {
+            close();
+            options.onManualEntry();
+        });
 
         const setStatus = (message, loading = false, error = false) => {
             status.classList.toggle('error', error);
