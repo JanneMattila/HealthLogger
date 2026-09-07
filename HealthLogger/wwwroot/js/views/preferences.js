@@ -2,6 +2,27 @@
 Object.assign(App.prototype, {
     async setupPreferences() {
         const form = document.getElementById('preferences-form');
+        const exportButton = document.getElementById('btn-export-data');
+        exportButton?.addEventListener('click', async () => {
+            exportButton.disabled = true;
+            exportButton.textContent = this.t('exporting_data');
+            try {
+                const blob = await API.exportData();
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `HealthLogger-data-${this.getLocalDateValue()}.txt`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch {
+                this.showToast(this.t('export_failed'), 'error');
+            } finally {
+                exportButton.disabled = false;
+                exportButton.textContent = this.t('btn_export_data');
+            }
+        });
         let reminderTimes = [];
         let ingredientCategories = ['Own'];
 

@@ -9,6 +9,13 @@ public static class ReportEndpoints
     {
         var group = app.MapGroup("/api/reports").RequireAuthorization();
 
+        group.MapGet("/export", async (HttpContext ctx, ReportService reportService) =>
+        {
+            ctx.Response.Headers.CacheControl = "no-store";
+            var text = await reportService.GenerateTextExportAsync(ctx.GetAppUserId());
+            return Results.File(text, "text/plain; charset=utf-8", $"HealthLogger-data-{DateTime.UtcNow:yyyy-MM-dd}.txt");
+        });
+
         group.MapGet("/weekly", async (DateOnly? date, HttpContext ctx, ReportService reportService) =>
         {
             var userId = ctx.GetAppUserId();

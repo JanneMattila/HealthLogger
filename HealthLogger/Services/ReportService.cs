@@ -1,4 +1,6 @@
 using HealthLogger.Data;
+using System.Globalization;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -11,6 +13,98 @@ public class ReportService
     private readonly HealthLoggerDbContext _db;
 
     public ReportService(HealthLoggerDbContext db) => _db = db;
+
+    public async Task<byte[]> GenerateTextExportAsync(string userId)
+    {
+        var id = Guid.Parse(userId);
+        var checkins = await _db.DailyCheckins.AsNoTracking()
+            .Where(checkin => checkin.UserId == id)
+            .OrderBy(checkin => checkin.CheckinDate).ThenBy(checkin => checkin.CreatedAt).ThenBy(checkin => checkin.Id)
+            .ToListAsync();
+        var metrics = await _db.BodyMetrics.AsNoTracking()
+            .Where(metric => metric.UserId == id)
+            .OrderBy(metric => metric.MeasurementDate).ThenBy(metric => metric.CreatedAt).ThenBy(metric => metric.Id)
+            .ToListAsync();
+        var entries = await _db.FoodEntries.AsNoTracking()
+            .Include(entry => entry.Items).ThenInclude(item => item.FoodItem)
+            .Where(entry => entry.UserId == id)
+            .OrderBy(entry => entry.EntryDate).ThenBy(entry => entry.ConsumptionTime)
+            .ThenBy(entry => entry.CreatedAt).ThenBy(entry => entry.Id)
+            .ToListAsync();
+
+        var text = new StringBuilder();
+        text.AppendLine("Health Logger - Data Export");
+        text.AppendLine("Oldest first. Dates are logged dates. Check-in and metric times are recorded times in UTC, not event times.");
+        text.AppendLine("Food times are consumption times as entered; missing times sort first within a date. '-' means not recorded.");
+        text.AppendLine("Text cells escape backslashes, pipes, tabs and line breaks as \\\\, \\|, \\t, \\r and \\n.");
+
+        void Row(params object?[] values)
+        {
+            var cells = values.Select(value => value switch
+            {
+                null => "-",
+                DateOnly date => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                TimeOnly time => time.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+                bool boolean => boolean ? "Yes" : "No",
+                IFormattable formatted => formatted.ToString(null, CultureInfo.InvariantCulture),
+                _ => value.ToString() ?? ""
+            }).Select(value => value.Replace("\\", "\\\\").Replace("|", "\\|")
+                .Replace("\t", "\\t").Replace("\r", "\\r").Replace("\n", "\\n"));
+            text.AppendLine($"| {string.Join(" | ", cells)} |");
+        }
+
+        void Table(string title, params string[] columns)
+        {
+            text.AppendLine();
+            text.AppendLine(title);
+            Row(columns.Cast<object?>().ToArray());
+            Row(columns.Select(_ => (object?)"---").ToArray());
+        }
+
+        Table("Rating scales (1-5; higher means better wellbeing)", "Rating", "1", "2", "3", "4", "5");
+        Row("Sleep quality", "Very poor", "Poor", "Fair", "Good", "Excellent");
+        Row("Mood", "Very low", "Low", "Neutral", "Good", "Excellent");
+        Row("Energy", "Exhausted", "Low", "Moderate", "High", "Very energetic");
+        Row("Stress", "Extreme", "High", "Moderate", "Low", "No stress");
+
+        Table("Check-ins", "Date", "Recorded time (UTC)", "Sleep quality (1-5)", "Sleep (hours)",
+            "Mood (1-5)", "Energy (1-5)", "Stress (1-5)", "Water (L)", "Exercise done", "Exercise type",
+            "Alcohol (units)", "Steps", "Notes");
+        foreach (var checkin in checkins)
+        {
+            Row(checkin.CheckinDate, TimeOnly.FromDateTime(checkin.CreatedAt), checkin.SleepQuality,
+                checkin.SleepHours, checkin.MoodRating, checkin.EnergyLevel, checkin.StressLevel,
+                checkin.WaterIntakeLiters, checkin.ExerciseDone, checkin.ExerciseType,
+                checkin.AlcoholUnits, checkin.StepCount, checkin.Notes);
+        }
+
+        Table("Metrics", "Date", "Recorded time (UTC)", "Weight (kg)", "Waist (cm)",
+            "Systolic BP (mmHg)", "Diastolic BP (mmHg)", "Notes");
+        foreach (var metric in metrics)
+        {
+            Row(metric.MeasurementDate, TimeOnly.FromDateTime(metric.CreatedAt), metric.WeightKg,
+                metric.WaistCircumferenceCm, metric.SystolicBP, metric.DiastolicBP, metric.Notes);
+        }
+
+        Table("Food", "Date", "Consumption time", "Meal", "Food (English)", "Food (Finnish)", "Portion (g)",
+            "Calories (kcal)", "Protein (g)", "Fat (g)", "Carbohydrate (g)", "Source recipe", "Item notes", "Meal notes");
+        foreach (var entry in entries)
+        {
+            if (entry.Items.Count == 0)
+                Row(entry.EntryDate, entry.ConsumptionTime, entry.MealType, null, null, null,
+                    entry.TotalCalories, null, null, null, null, null, entry.Notes);
+            foreach (var item in entry.Items.OrderBy(item => item.CreatedAt).ThenBy(item => item.Id))
+            {
+                Row(entry.EntryDate, entry.ConsumptionTime, entry.MealType,
+                    item.FoodItem?.NameEn ?? item.SourceRecipeName ?? item.Notes, item.FoodItem?.NameFi,
+                    item.PortionGrams, item.CustomCalories ?? item.FoodItem?.EnergyKcal * item.PortionGrams / 100,
+                    item.FoodItem?.Protein * item.PortionGrams / 100, item.FoodItem?.Fat * item.PortionGrams / 100,
+                    item.FoodItem?.Carbohydrate * item.PortionGrams / 100, item.SourceRecipeName, item.Notes, entry.Notes);
+            }
+        }
+
+        return Encoding.UTF8.GetBytes(text.ToString());
+    }
 
     public async Task<byte[]> GenerateWeeklyReportAsync(string userId, DateOnly weekStart)
     {

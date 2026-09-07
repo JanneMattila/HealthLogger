@@ -1,5 +1,5 @@
 const API = {
-    async request(method, url, data = null) {
+    async request(method, url, data = null, responseType = 'json') {
         const options = {
             method,
             headers: { 'Content-Type': 'application/json' },
@@ -17,6 +17,12 @@ const API = {
             throw error;
         }
         if (response.status === 204) return null;
+        if (responseType === 'text-file') {
+            if (!response.headers.get('Content-Type')?.startsWith('text/plain')) {
+                throw new Error('Expected a text export');
+            }
+            return response.blob();
+        }
         return response.json();
     },
 
@@ -86,6 +92,7 @@ const API = {
     getMacroDistribution: (from, to) => API.request('GET', `/api/stats/macros?from=${from}&to=${to}`),
 
     // User
+    exportData: () => API.request('GET', '/api/reports/export', null, 'text-file'),
     getPreferences: () => API.request('GET', '/api/user/preferences'),
     savePreferences: (prefs) => API.request('PUT', '/api/user/preferences', prefs),
 };
