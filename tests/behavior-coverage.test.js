@@ -46,6 +46,210 @@ async function navigate(page, route, selector) {
     await page.locator(selector).waitFor({ state: 'visible' });
 }
 
+async function testDashboardCheckinBanner(browser) {
+    const { context, page } = await openPage(browser);
+    const setTime = async value => {
+        await page.clock.setFixedTime(new Date(value));
+        await page.evaluate(() => app.refreshDashboardCheckinReminder());
+    };
+    try {
+        await page.clock.setFixedTime(new Date('2026-09-11T19:59:00'));
+        await initializeApp(page);
+        await page.evaluate(() => {
+            localStorage.setItem('HealthLogger_notifications', 'true');
+            localStorage.setItem('HealthLogger_reminders', JSON.stringify(['20:00', '08:00']));
+            API.getCheckin = async () => { throw { status: 404 }; };
+        });
+        await navigate(page, 'dashboard', '.dashboard');
+        const banner = page.locator('#dashboard-checkin-reminder');
+        assert(!await banner.isVisible(), 'banner stays hidden before the last reminder even after an earlier reminder');
+        await setTime('2026-09-11T20:00:00');
+        assert(await banner.isVisible(), 'missing daily check-in shows the banner at the final reminder on desktop');
+        const position = await banner.evaluate(element => ({
+            bottom: element.getBoundingClientRect().bottom,
+            calorieTop: document.querySelector('.calorie-summary').getBoundingClientRect().top
+        }));
+        assert(position.bottom <= position.calorieTop, 'check-in banner sits above the kcal tile');
+        await page.locator('.dashboard-checkin-dismiss').press('Enter');
+        assert(await page.evaluate(() => app.currentPage) === 'dashboard', 'dismissal does not trigger navigation');
+        await navigate(page, 'dashboard', '.dashboard');
+        await page.evaluate(() => app.refreshDashboardCheckinReminder());
+        assert(!await banner.isVisible(), 'daily dismissal survives overview navigation');
+        await setTime('2026-09-12T19:59:00');
+        assert(!await banner.isVisible(), 'next day still waits for the last reminder');
+        await setTime('2026-09-12T20:01:00');
+        assert(await banner.isVisible(), 'yesterday dismissal does not suppress today banner');
+        await page.locator('.dashboard-checkin-action').press('Enter');
+        await page.locator('#checkin-form').waitFor({ state: 'visible' });
+        assert(await page.evaluate(() => app.currentPage) === 'checkin', 'banner keyboard activation opens Check-in');
+        await page.evaluate(() => { API.getCheckin = async () => ({ sleepHours: 7 }); });
+        await navigate(page, 'dashboard', '.dashboard');
+        await page.evaluate(() => app.refreshDashboardCheckinReminder());
+        assert(!await banner.isVisible(), 'completed daily check-in suppresses the banner');
+        await page.evaluate(async () => {
+            API.getCheckin = async () => { throw { status: 500 }; };
+            await app.refreshDashboardCheckinReminder();
+        });
+        assert(!await banner.isVisible(), 'API failure does not falsely claim a missing check-in');
+        await page.evaluate(async () => {
+            API.getCheckin = async () => { throw { status: 404 }; };
+            localStorage.setItem('HealthLogger_notifications', 'false');
+            await app.refreshDashboardCheckinReminder();
+        });
+        assert(!await banner.isVisible(), 'disabled reminders suppress the banner');
+        await page.evaluate(async () => {
+            localStorage.setItem('HealthLogger_notifications', 'true');
+            localStorage.setItem('HealthLogger_reminders', '[]');
+            await app.refreshDashboardCheckinReminder();
+        });
+        assert(!await banner.isVisible(), 'no reminder schedule means no overdue banner');
+        await page.evaluate(async () => {
+            localStorage.setItem('HealthLogger_reminders', '["20:00"]');
+            await app.checkReminders();
+        });
+        assert(await banner.isVisible(), 'existing reminder checker refreshes the overview banner');
+        for (const lang of ['en', 'fi']) {
+            await page.evaluate(async language => { await window.i18n.setLang(language); }, lang);
+            await page.setViewportSize({ width: 390, height: 844 });
+            await navigate(page, 'dashboard', '.dashboard');
+            await page.evaluate(() => app.refreshDashboardCheckinReminder());
+            assert(await banner.evaluate(element => element.scrollWidth <= element.clientWidth), `banner text fits mobile in ${lang}`);
+        }
+    } finally {
+        await context.close();
+    }
+}
+
+async function testMealFavoritesAndRecipes(browser) {
+    const { context, page } = await openPage(browser);
+    try {
+        await initializeApp(page);
+        await page.evaluate(() => {
+            const foods = {
+                starred: { id: 'starred', nameEn: 'Starred milk', nameFi: 'Maito', category: 'Dairy', energyKcal: 50 },
+                other: { id: 'other', nameEn: 'Other milk', nameFi: 'Muu maito', category: 'Dairy', energyKcal: 60 },
+                fruit: { id: 'fruit', nameEn: 'Apple', category: 'Fruit', energyKcal: 40 }
+            };
+            app.saveFavorites([
+                { id: 'starred', type: 'food', name: 'Starred milk', kcalPer100: 50 },
+                { id: 'offline', type: 'food', name: 'Offline milk', kcalPer100: 70 },
+                { id: 'fruit', type: 'food', name: 'Apple', kcalPer100: 40 }
+            ]);
+            API.getFood = async id => {
+                if (!foods[id]) throw Error('Not available');
+                return foods[id];
+            };
+            API.searchFoods = async () => [foods.other, foods.starred];
+            API.browseFoods = async () => [foods.other, foods.starred];
+            API.getFoodCategories = async () => ['Dairy', 'Fruit'];
+            API.getRecipes = () => new Promise(resolve => { window.__resolveMealRecipes = resolve; });
+        });
+        await navigate(page, 'add-meal', '.add-meal-page');
+        await page.locator('#search-results [data-id="offline"]').waitFor();
+        assert(await page.locator('#search-results .search-result').count() === 3, 'Add Meal initially shows starred foods');
+        await page.locator('#food-search-input').fill('MILK');
+        await page.locator('#search-results [data-id="other"]').waitFor();
+        assert(await page.locator('#search-results .search-result').count() === 3, 'matching favorites are merged without duplicates and unrelated stars are excluded');
+        const headings = await page.locator('#search-results h3').allTextContents();
+        const expectedHeadings = await page.evaluate(() => [app.t('favorites_title'), app.t('other_products')]);
+        assert(JSON.stringify(headings) === JSON.stringify(expectedHeadings), 'Add Meal groups starred foods before other products like Ingredients');
+        assert(await page.locator('#search-results .search-result').last().getAttribute('data-id') === 'other', 'non-starred search results follow all matching favorites');
+        await page.locator('#search-results [data-id="other"] .search-favorite').click();
+        assert(await page.locator('#search-results h3').count() === 1, 'starring a result immediately updates its group');
+        assert(await page.locator('.ingredient-detail').count() === 0, 'starring does not open the ingredient dialog');
+        await page.locator('#meal-ingredient-category').selectOption('Dairy');
+        await page.waitForFunction(() => document.querySelectorAll('#search-results .search-result').length === 2);
+        assert(await page.locator('#search-results [data-id="offline"]').count() === 0, 'category filter also applies to starred foods');
+
+        await page.locator('#meal-tab-recipes').click();
+        assert(await page.locator('#meal-recipe-items [role="status"]').isVisible(), 'recipe tab displays loading state');
+        await page.evaluate(() => window.__resolveMealRecipes([{ id: 'recipe', name: 'Milk recipe', ingredients: [], customCalories: 125 }]));
+        await page.locator('.recipe-quick-item').waitFor();
+        assert((await page.locator('.recipe-quick-item').textContent()).includes('125'), 'manual recipe calories are shown in the picker');
+        await page.locator('#meal-entry-date').fill('2026-09-10');
+        await page.locator('#meal-consumption-time').fill('12:34');
+        await page.locator('.meal-composer-details [data-meal="lunch"]').click();
+        await page.evaluate(() => { API.addRecipeAsMeal = async (id, data) => { window.__addedRecipe = { id, ...data }; }; });
+        await page.locator('.recipe-quick-item').press('Enter');
+        await page.locator('.recipe-use-dialog').waitFor();
+        await page.locator('#recipe-portion-quantity').fill('2');
+        await page.locator('#btn-rp-add').click();
+        await page.waitForFunction(() => !!window.__addedRecipe);
+        const added = await page.evaluate(() => window.__addedRecipe);
+        assert(added.id === 'recipe' && added.entryDate === '2026-09-10' && added.mealType === 'lunch'
+            && added.consumptionTime === '12:34:00' && added.portionMultiplier === 2,
+        'recipe selection submits the chosen portion with the Add Meal date, time and meal type');
+
+        await page.evaluate(() => { API.getRecipes = async () => []; });
+        await navigate(page, 'add-meal', '.add-meal-page');
+        await page.locator('#meal-tab-recipes').click();
+        assert((await page.locator('#meal-recipe-items').textContent()).trim() === await page.evaluate(() => app.t('no_recipes')), 'recipe tab explains an empty recipe list');
+        await page.evaluate(() => { API.getRecipes = async () => { throw Error('Unavailable'); }; });
+        await navigate(page, 'add-meal', '.add-meal-page');
+        await page.locator('#meal-tab-recipes').click();
+        assert(await page.locator('#meal-recipe-items [role="alert"]').isVisible(), 'recipe tab shows load failures instead of an empty panel');
+        for (const lang of ['en', 'fi']) {
+            await page.evaluate(async language => { await window.i18n.setLang(language); app.applyTranslations(); }, lang);
+            for (const width of [1280, 390]) {
+                await page.setViewportSize({ width, height: 900 });
+                const fits = await page.locator('.meal-source-tab').evaluateAll(tabs => tabs.every(tab => tab.scrollWidth <= tab.clientWidth));
+                assert(fits, `all four source tabs fit in ${lang} at width ${width}`);
+            }
+        }
+    } finally {
+        await context.close();
+    }
+}
+
+async function testCheckinStepsAndFocus(browser) {
+    const { context, page } = await openPage(browser);
+    try {
+        await initializeApp(page);
+        await page.evaluate(() => {
+            window.__savedCheckins = [];
+            API.getCheckin = async () => ({ stepCount: 0, moodRating: 3 });
+            API.saveCheckin = async checkin => { window.__savedCheckins.push(checkin); };
+        });
+        await navigate(page, 'checkin', '#checkin-form');
+        const steps = page.locator('[name="stepCount"]');
+        assert(await steps.inputValue() === '0', 'check-in restores zero steps');
+        for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+            await page.setViewportSize(viewport);
+            if (viewport.width < 768) await page.locator('#nav-toggle').click();
+            await page.locator('[name="sleepHours"]').fill('7.5');
+            await page.locator('[name="sleepHours"]').press('Enter');
+            assert(await page.locator('[data-field="moodRating"] .selected').evaluate(element => element === document.activeElement),
+                `Enter focuses the next rating selection at width ${viewport.width}`);
+            await steps.fill('8500');
+            await steps.press('Enter');
+            assert(await page.locator('[name="notes"]').evaluate(element => element === document.activeElement),
+                `Enter from steps focuses Notes at width ${viewport.width}`);
+            assert(await page.evaluate(() => window.__savedCheckins.length) === 0,
+                'Enter in numeric fields does not submit the check-in');
+        }
+        await page.locator('[name="notes"]').fill('First line');
+        await page.locator('[name="notes"]').press('End');
+        await page.locator('[name="notes"]').press('Enter');
+        assert((await page.locator('[name="notes"]').inputValue()).includes('\n'), 'Enter in Notes preserves multiline editing');
+        for (const invalid of ['-1', '1.5']) {
+            await steps.fill(invalid);
+            assert(!await steps.evaluate(element => element.checkValidity()), 'steps reject negative or fractional counts');
+        }
+        for (const value of ['8500', '0', '']) {
+            await steps.fill(value);
+            await page.locator('#checkin-form button[type="submit"]').click();
+            await page.locator('.dashboard').waitFor({ state: 'visible' });
+            const saved = await page.evaluate(() => window.__savedCheckins.at(-1));
+            assert(saved.stepCount === (value === '' ? null : Number(value)), `steps save ${value === '' ? 'blank as null' : value}`);
+            await page.evaluate(checkin => { API.getCheckin = async () => checkin; }, saved);
+            await navigate(page, 'checkin', '#checkin-form');
+            assert(await steps.inputValue() === value, 'saved steps repopulate on return');
+        }
+    } finally {
+        await context.close();
+    }
+}
+
 async function testMetricsUnchangedAndMeasuredNow(browser) {
     const { context, page } = await openPage(browser);
     const latest = {
@@ -480,6 +684,9 @@ async function testExplicitMealDatePassThrough(browser) {
 (async () => {
     const browser = await chromium.launch({ headless: true });
     try {
+        await testDashboardCheckinBanner(browser);
+        await testMealFavoritesAndRecipes(browser);
+        await testCheckinStepsAndFocus(browser);
         await testMetricsUnchangedAndMeasuredNow(browser);
         await testDrinkSelectionAndSharedConfirmation(browser);
         await testIngredientBarcodeAction(browser);

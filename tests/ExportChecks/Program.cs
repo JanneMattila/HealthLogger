@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using HealthLogger.Data;
 using HealthLogger.Entities;
+using HealthLogger.Repositories;
 using HealthLogger.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -93,4 +94,17 @@ var empty = Encoding.UTF8.GetString(await service.GenerateTextExportAsync(Guid.N
 Check(empty.Contains("| Stress | Extreme | High | Moderate | Low | No stress |"), "empty exports also explain rating scales");
 Check(empty.Contains("Check-ins") && empty.Contains("Metrics") && empty.Contains("Food")
     && !empty.Contains("| 202"), "empty exports contain all three table headers without records");
+var checkinRepository = new CheckinRepository(database);
+var checkinDate = new DateOnly(2026, 9, 11);
+Guid? checkinId = null;
+foreach (int? steps in new int?[] { 8500, 9000, 0, null })
+{
+    var savedCheckin = await checkinRepository.CreateOrUpdateAsync(owner.ToString(),
+        new DailyCheckinEntity { CheckinDate = checkinDate, StepCount = steps });
+    checkinId ??= savedCheckin.Id;
+    database.ChangeTracker.Clear();
+    var loadedCheckin = await checkinRepository.GetByDateAsync(owner.ToString(), checkinDate);
+    Check(loadedCheckin?.Id == checkinId && loadedCheckin?.StepCount == steps,
+        $"check-in persists steps {steps?.ToString() ?? "null"} when creating or updating the same day");
+}
 Console.WriteLine(JsonSerializer.Serialize(new { text }));

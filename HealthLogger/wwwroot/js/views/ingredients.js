@@ -88,22 +88,7 @@ Object.assign(App.prototype, {
 
         const loadFavoriteFoods = () => {
             if (favoriteFoodsPromise) return favoriteFoodsPromise;
-            const favorites = this.getFavorites().filter(favorite => favorite.type === 'food');
-            favoriteFoodsPromise = Promise.all(favorites.map(async favorite => {
-                try {
-                    return await API.getFood(favorite.id);
-                } catch {
-                    return {
-                        id: favorite.id,
-                        nameFi: favorite.name,
-                        nameEn: favorite.name,
-                        energyKcal: favorite.kcalPer100,
-                        protein: favorite.protein,
-                        fat: favorite.fat,
-                        carbohydrate: favorite.carbs
-                    };
-                }
-            }));
+            favoriteFoodsPromise = this.loadFavoriteFoods();
             return favoriteFoodsPromise;
         };
 

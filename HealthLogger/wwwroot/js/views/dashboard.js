@@ -1,6 +1,7 @@
 // Dashboard view
 Object.assign(App.prototype, {
     async setupDashboard() {
+        this.refreshDashboardCheckinReminder();
         try {
             const today = this.getLocalDateValue();
             const [data, todayEntries] = await Promise.all([
@@ -74,6 +75,52 @@ Object.assign(App.prototype, {
             }
         } catch (e) {
             console.error('Dashboard load failed:', e);
+        }
+    },
+
+    async refreshDashboardCheckinReminder() {
+        const container = document.getElementById('dashboard-checkin-reminder');
+        if (!container) return;
+        const requestId = this.dashboardCheckinRequestId = (this.dashboardCheckinRequestId || 0) + 1;
+        const today = this.getLocalDateValue();
+        const dismissalKey = 'HealthLogger_checkin_banner_dismissed';
+        try {
+            const reminders = JSON.parse(localStorage.getItem('HealthLogger_reminders') || '[]');
+            const now = new Date();
+            const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const lastReminder = Array.isArray(reminders)
+                ? reminders.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)).sort().at(-1)
+                : null;
+            if (localStorage.getItem('HealthLogger_notifications') !== 'true' || !lastReminder
+                || currentTime < lastReminder || localStorage.getItem(dismissalKey) === today) {
+                container.hidden = true;
+                return;
+            }
+            let checkin;
+            try {
+                checkin = await API.getCheckin(today);
+            } catch (error) {
+                if (error.status !== 404) throw error;
+            }
+            if (!container.isConnected || requestId !== this.dashboardCheckinRequestId
+                || today !== this.getLocalDateValue()) return;
+            if (checkin || localStorage.getItem(dismissalKey) === today) {
+                container.hidden = true;
+                return;
+            }
+            if (!container.hidden) return;
+            container.innerHTML = `
+                <button type="button" class="dashboard-checkin-action">${this.t('reminder_checkin')}</button>
+                <button type="button" class="dashboard-checkin-dismiss" title="${this.t('btn_close')}" aria-label="${this.t('btn_close')}">&times;</button>
+            `;
+            container.querySelector('.dashboard-checkin-action').addEventListener('click', () => this.navigate('checkin'));
+            container.querySelector('.dashboard-checkin-dismiss').addEventListener('click', () => {
+                localStorage.setItem(dismissalKey, this.getLocalDateValue());
+                container.hidden = true;
+            });
+            container.hidden = false;
+        } catch {
+            if (requestId === this.dashboardCheckinRequestId) container.hidden = true;
         }
     },
 

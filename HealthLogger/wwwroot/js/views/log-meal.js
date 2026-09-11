@@ -229,11 +229,18 @@ Object.assign(App.prototype, {
 
         const renderSearchResults = (results, container = searchResults) => {
             const sortedResults = this.sortFavoritesFirst(results);
+            let previousFavorite;
             container.innerHTML = sortedResults.map(f => {
                 const primaryName = this.getLocalizedName(f);
                 const secondaryName = this.getSecondaryName(f);
                 const isFavorite = this.isFavorite(f.id);
+                const sectionTitle = container === searchResults && isFavorite !== previousFavorite
+                    && (isFavorite || previousFavorite === true)
+                    ? `<h3 class="ingredients-section-title">${this.t(isFavorite ? 'favorites_title' : 'other_products')}</h3>`
+                    : '';
+                previousFavorite = isFavorite;
                 return `
+                    ${sectionTitle}
                     <div class="search-result" data-id="${f.id}" data-kcal="${f.energyKcal}"
                          data-protein="${f.protein}" data-fat="${f.fat}" data-carbs="${f.carbohydrate}"
                          data-default-portion="${f.defaultPortionGrams || 100}"
@@ -387,24 +394,29 @@ Object.assign(App.prototype, {
         const refreshSearchResults = async () => {
             const query = searchInput.value.trim();
             const category = categorySelect?.value || '';
-            if (query.length < 2 && !category) {
-                searchResults.innerHTML = '';
-                return;
-            }
+            const requestId = ++searchRequestId;
 
             try {
-                const results = query.length >= 2
-                    ? await this.searchFoods(query)
-                    : await API.browseFoods(category, window.i18n?.lang || 'en', 100, 0);
-                renderSearchResults(category
-                    ? results.filter(food => food.category === category)
-                    : results);
+                const [results, favorites] = await Promise.all([query.length >= 2
+                    ? this.searchFoods(query)
+                    : category ? API.browseFoods(category, window.i18n?.lang || 'en', 100, 0) : [],
+                    this.loadFavoriteFoods()]);
+                if (requestId !== searchRequestId) return;
+                const normalizedQuery = query.toLowerCase();
+                const matchingFavorites = favorites.filter(food => (!category || food.category === category)
+                    && (query.length < 2 || [food.nameFi, food.nameEn]
+                        .some(name => (name || '').toLowerCase().includes(normalizedQuery))));
+                const favoriteIds = new Set(matchingFavorites.map(food => food.id));
+                renderSearchResults([...matchingFavorites, ...results.filter(food => !favoriteIds.has(food.id)
+                    && (!category || food.category === category))]);
             } catch (e) {
                 console.error('Search failed:', e);
             }
         };
 
+        let searchRequestId = 0;
         searchInput?.addEventListener('input', () => {
+            searchRequestId++;
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(refreshSearchResults, 300);
         });
@@ -448,6 +460,7 @@ Object.assign(App.prototype, {
         updateMealItemsHeading();
         this.renderRecentFoods();
         this.renderRecipeQuickAdd();
+        refreshSearchResults();
     },
 
     async setupAddMeal() {
@@ -574,20 +587,26 @@ Object.assign(App.prototype, {
     },
 
     async renderRecipeQuickAdd() {
+        const container = document.getElementById('meal-recipe-items');
+        if (!container) return;
+        container.className = 'recipe-quick-add';
+        container.innerHTML = `<p class="meal-source-empty" role="status">${this.t('loading')}</p>`;
         try {
             const recipes = await API.getRecipes();
-            const container = document.getElementById('meal-recipe-items');
-            if (!container || !recipes || recipes.length === 0) return;
-            container.className = 'recipe-quick-add';
+            if (!container.isConnected) return;
+            if (!recipes || recipes.length === 0) {
+                container.innerHTML = `<p class="meal-source-empty">${this.t('no_recipes')}</p>`;
+                return;
+            }
             container.innerHTML = `<h3>${this.t('my_recipes')}</h3>` + recipes.map(r => {
-                const totalKcal = (r.ingredients || []).reduce((sum, ing) => {
+                const totalKcal = r.ingredients?.length ? r.ingredients.reduce((sum, ing) => {
                     const food = ing.foodItem;
                     return sum + (food ? food.energyKcal * ing.portionGrams / 100 : 0);
-                }, 0);
+                }, 0) : Number(r.customCalories || 0) * (r.nutritionMode === 'per100g' ? (Number(r.productWeightG) || 100) / 100 : 1);
                 return `
                     <div class="search-result recipe-quick-item" data-recipe-id="${r.id}">
                         <div>
-                            <div class="food-name">${r.name}</div>
+                            <div class="food-name">${escapeIngredientHtml(r.name)}</div>
                             <div class="food-cal">${(r.ingredients || []).length} ${this.t('ingredients_count')}</div>
                         </div>
                         <div class="food-cal">${this.formatCalories(totalKcal)}</div>
@@ -610,7 +629,9 @@ Object.assign(App.prototype, {
                     }
                 });
             });
-        } catch (e) { /* no recipes */ }
+        } catch (e) {
+            if (container.isConnected) container.innerHTML = `<p class="meal-source-empty" role="alert">${this.t('error_loading_recipes')}</p>`;
+        }
     },
 
     showMealItemEditor(entry, item, onSaved) {

@@ -140,6 +140,7 @@ class App {
         if (this._checkingReminders) return;
         this._checkingReminders = true;
         try {
+            await this.refreshDashboardCheckinReminder();
             if (!window.matchMedia?.('(max-width: 767px), (pointer: coarse)').matches) return;
             if (localStorage.getItem('HealthLogger_notifications') !== 'true') return;
             const reminders = JSON.parse(localStorage.getItem('HealthLogger_reminders') || '[]');

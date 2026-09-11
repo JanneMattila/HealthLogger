@@ -238,6 +238,27 @@ h2 { margin-bottom: 1rem; font-size: 1.3rem; }
 h3 { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
 
 /* Calorie summary */
+.dashboard-checkin-reminder {
+    display: flex;
+    align-items: stretch;
+    margin-bottom: 0.5rem;
+    border: 1px solid #b66b08;
+    border-left: 5px solid #b66b08;
+    border-radius: 6px;
+    background: #fff3cd;
+    color: #533500;
+}
+.dashboard-checkin-reminder[hidden] { display: none; }
+.dashboard-checkin-reminder button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.dashboard-checkin-action { flex: 1; min-width: 0; padding: 1rem; text-align: left; font-weight: 600 !important; overflow-wrap: anywhere; }
+.dashboard-checkin-dismiss { flex: 0 0 44px; min-height: 44px; font-size: 1.5rem !important; }
+.dashboard-checkin-reminder button:focus-visible { outline: 3px solid var(--primary); outline-offset: -3px; }
 .calorie-summary {
     background: var(--bg-card);
     border-radius: var(--radius);
@@ -363,7 +384,7 @@ h3 { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
 .meal-date-time-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .meal-date-time-grid .consumption-time-field { margin: 0; }
 .meal-composer-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr); gap: 1rem; align-items: start; }
-.meal-source-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
+.meal-source-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
 .meal-source-tab {
     border: 0;
     border-bottom: 3px solid transparent;
@@ -373,6 +394,7 @@ h3 { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
     cursor: pointer;
     font: inherit;
     font-weight: 600;
+    overflow-wrap: anywhere;
 }
 .meal-source-tab:hover { color: var(--primary); }
 .meal-source-tab.active { color: var(--primary); border-bottom-color: var(--primary); background: rgba(45, 122, 79, 0.06); }
@@ -394,6 +416,7 @@ h3 { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
 
 @media (max-width: 520px) {
     .meal-date-time-grid { grid-template-columns: 1fr; }
+    .meal-source-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .meal-source-tab { padding-inline: 0.5rem; }
 }
 

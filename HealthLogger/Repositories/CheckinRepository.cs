@@ -39,6 +39,7 @@ public class CheckinRepository
             existing.MoodRating = checkin.MoodRating;
             existing.EnergyLevel = checkin.EnergyLevel;
             existing.StressLevel = checkin.StressLevel;
+            existing.StepCount = checkin.StepCount;
             existing.Notes = checkin.Notes;
             existing.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();

@@ -1,6 +1,17 @@
 // Check-in view
 Object.assign(App.prototype, {
     async setupCheckin() {
+        document.getElementById('checkin-form')?.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' || event.isComposing || !event.target.matches('input')) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const nextGroup = event.target.closest('.checkin-group')?.nextElementSibling;
+            const nextField = nextGroup?.querySelector('.rating-buttons .selected')
+                || nextGroup?.querySelector('button, input, select, textarea')
+                || event.currentTarget.querySelector('button[type="submit"]');
+            nextField?.focus();
+        });
+
         document.querySelectorAll('.rating-buttons').forEach(group => {
             group.querySelectorAll('button').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -32,6 +43,7 @@ Object.assign(App.prototype, {
                 moodRating: this.getSelectedRating('moodRating'),
                 energyLevel: this.getSelectedRating('energyLevel'),
                 stressLevel: this.getSelectedRating('stressLevel'),
+                stepCount: form.stepCount?.value ? Number(form.stepCount.value) : null,
                 notes: form.notes?.value || null
             };
             try {
@@ -58,6 +70,7 @@ Object.assign(App.prototype, {
         const form = document.getElementById('checkin-form');
         if (form) {
             if (checkin.sleepHours) form.sleepHours.value = checkin.sleepHours;
+            if (checkin.stepCount != null) form.stepCount.value = checkin.stepCount;
             if (checkin.notes) form.notes.value = checkin.notes;
         }
     },

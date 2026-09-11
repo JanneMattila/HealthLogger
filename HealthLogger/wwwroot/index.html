@@ -61,6 +61,7 @@
     <template id="tmpl-dashboard">
         <div class="page dashboard">
             <h2 data-i18n="page_dashboard">📊 Dashboard</h2>
+            <div id="dashboard-checkin-reminder" class="dashboard-checkin-reminder" hidden></div>
             <div class="calorie-summary">
                 <div class="calorie-ring">
                     <div class="calorie-value" id="calories-today">0</div>
@@ -133,6 +134,7 @@
                     <div class="meal-source-tabs" role="tablist" aria-label="Ingredient source" data-i18n-aria-label="ingredient_source_label">
                         <button type="button" class="meal-source-tab active" id="meal-tab-lookup" role="tab" tabindex="0" aria-selected="true" aria-controls="meal-panel-lookup" data-panel="lookup" data-i18n="ingredient_lookup_tab">Ingredient lookup</button>
                         <button type="button" class="meal-source-tab" id="meal-tab-drinks" role="tab" tabindex="-1" aria-selected="false" aria-controls="meal-panel-drinks" data-panel="drinks" data-i18n="drinks_tab">Drinks</button>
+                        <button type="button" class="meal-source-tab" id="meal-tab-recipes" role="tab" tabindex="-1" aria-selected="false" aria-controls="meal-panel-recipes" data-panel="recipes" data-i18n="my_recipes">My recipes</button>
                         <button type="button" class="meal-source-tab" id="meal-tab-recent" role="tab" tabindex="-1" aria-selected="false" aria-controls="meal-panel-recent" data-panel="recent" data-i18n="recent_items_tab">Recent items</button>
                     </div>
                     <div class="meal-source-content">
@@ -157,6 +159,8 @@
                         </div>
                         <div id="meal-panel-recent" class="meal-source-tab-panel" role="tabpanel" aria-labelledby="meal-tab-recent" hidden>
                             <div id="meal-recent-items"></div>
+                        </div>
+                        <div id="meal-panel-recipes" class="meal-source-tab-panel" role="tabpanel" aria-labelledby="meal-tab-recipes" hidden>
                             <div id="meal-recipe-items"></div>
                         </div>
                     </div>
@@ -374,6 +378,10 @@
                     </div>
                     <div class="rating-scale-labels"><span data-i18n="rating_stress_1">Extreme</span><span data-i18n="rating_stress_5">No stress</span></div>
                     <div class="rating-selection" data-rating-description="stressLevel" aria-live="polite"></div>
+                </div>
+                <div class="checkin-group">
+                    <label for="checkin-step-count" data-i18n="label_steps">Steps</label>
+                    <input id="checkin-step-count" type="number" name="stepCount" step="1" min="0" max="2147483647" inputmode="numeric" />
                 </div>
                 <div class="checkin-group">
                     <label data-i18n="label_notes">📝 Notes</label>

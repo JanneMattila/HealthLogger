@@ -14,6 +14,25 @@ Object.assign(App.prototype, {
         return this.getFavorites().some(f => f.id === id);
     },
 
+    async loadFavoriteFoods() {
+        const favorites = this.getFavorites().filter(favorite => favorite.type === 'food');
+        return Promise.all(favorites.map(async favorite => {
+            try {
+                return await API.getFood(favorite.id);
+            } catch {
+                return {
+                    id: favorite.id,
+                    nameFi: favorite.name,
+                    nameEn: favorite.name,
+                    energyKcal: favorite.kcalPer100,
+                    protein: favorite.protein,
+                    fat: favorite.fat,
+                    carbohydrate: favorite.carbs
+                };
+            }
+        }));
+    },
+
     sortFavoritesFirst(items) {
         const favoriteIds = new Set(this.getFavorites().map(f => f.id));
         return items
