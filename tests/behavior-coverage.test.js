@@ -318,6 +318,11 @@ async function testDrinkSelectionAndSharedConfirmation(browser) {
             'task 2: Add Meal exposes the built-in drink choices');
         await page.locator('#meal-drink-results .search-result').nth(1).click();
         await page.locator('.ingredient-detail[role="dialog"]').waitFor();
+        assert(await page.locator('.ingredient-amount-row select').inputValue() === 'ml',
+            'Add Meal drinks use volume units in the shared dialog');
+        await page.locator('.ingredient-portion-preset[data-amount="500"]').click();
+        assert((await page.locator('.ingredient-nutrition-heading').textContent()).includes('500 ml'),
+            'Add Meal drink nutrition uses the selected volume');
         await page.locator('.ingredient-add-btn').click();
         const confirmation = page.locator('.ingredient-confirmation-content[role="dialog"]');
         await confirmation.waitFor();
@@ -328,6 +333,169 @@ async function testDrinkSelectionAndSharedConfirmation(browser) {
             'task 2: confirming a drink adds it to the meal draft');
         assert((await page.locator('.meal-item').textContent()).includes('Drink 902'),
             'task 2: the selected drink remains visible in the draft');
+        assert(await page.evaluate(() => app.mealItems[0].portion) === 500,
+            'Add Meal drink volume is preserved in the meal draft');
+    } finally {
+        await context.close();
+    }
+}
+
+async function testSharedDrinkConsumption(browser, viewport, lang) {
+    const { context, page } = await openPage(browser);
+    try {
+        await page.setViewportSize(viewport);
+        await initializeApp(page);
+        await page.evaluate(async locale => {
+            await i18n.setLang(locale);
+            window.__drinkEntries = [];
+            window.__failDrinkSave = false;
+            API.getFoodByFineliId = async fineliId => ({
+                id: `drink-${fineliId}`, fineliId,
+                nameEn: `Drink ${fineliId}`, nameFi: `Juoma ${fineliId}`,
+                energyKcal: fineliId === 922 ? 0 : 40,
+                protein: 1, fat: 2, saturatedFat: 0.5, carbohydrate: 7, sugar: 6, fiber: 0, salt: 0.1
+            });
+            API.createEntry = async payload => {
+                if (window.__failDrinkSave) throw new Error('Test save failure');
+                const entry = { ...payload, id: `entry-${window.__drinkEntries.length}`, items: [] };
+                window.__drinkEntries.push(entry);
+                return entry;
+            };
+            API.addEntryItem = async (id, payload) => {
+                const food = await API.getFoodByFineliId(Number(payload.foodItemId.split('-')[1]));
+                window.__drinkEntries.find(entry => entry.id === id).items.push({
+                    ...payload, id: 'item', foodItem: food
+                });
+            };
+            API.getEntries = async () => window.__drinkEntries;
+        }, lang);
+        await navigate(page, 'drinks', '#btn-quick-water');
+        for (const drink of [
+            { button: 'water', volume: 200, amount: '2', unit: 'dl', kcal: 0 },
+            { button: 'coffee', volume: 200, amount: '2', unit: 'dl', kcal: 80 },
+            { button: 'beer', volume: 330, amount: '330', unit: 'ml', kcal: 132 },
+            { button: 'soft-drink-sugar', volume: 330, amount: '330', unit: 'ml', kcal: 132 },
+            { button: 'soft-drink-no-sugar', volume: 330, amount: '330', unit: 'ml', kcal: 132 },
+            { button: 'spirit', volume: 40, amount: '40', unit: 'ml', kcal: 16 }
+        ]) {
+            await page.locator(`#btn-quick-${drink.button}`).click();
+            const detail = page.locator('.ingredient-detail[role="dialog"]');
+            await detail.waitFor();
+            assert(await detail.locator('.ingredient-portion-amount').inputValue() === drink.amount
+                && await detail.locator('.ingredient-amount-row select').inputValue() === drink.unit,
+            `${drink.button} retains its default drink amount and unit in ${lang}`);
+            assert((await detail.locator('.ingredient-nutrition-heading').textContent()).includes(`${drink.volume} ml`)
+                && (await detail.locator('[data-nutrient="energy"]').textContent()).startsWith(`${drink.kcal} kcal`),
+            `${drink.button} displays scaled nutrition in ${lang}`);
+            const table = await detail.locator('.nutrient-table').boundingBox();
+            const amount = await detail.locator('.ingredient-amount-row').boundingBox();
+            assert(table.y + table.height <= amount.y, 'drink nutrition appears above amount controls');
+            assert(await detail.locator('.ingredient-weight-settings').count() === 0,
+                'drink dialog omits ingredient gram-weight settings');
+            assert(!await detail.locator('input').evaluateAll(inputs => inputs.includes(document.activeElement)),
+                'opening a drink does not focus an input');
+            const bounds = await detail.boundingBox();
+            assert(viewport.width < 768
+                ? bounds.x === 0 && bounds.y === 0 && bounds.width === viewport.width && bounds.height === viewport.height
+                : bounds.width === 500,
+            `drinks share the ingredient layout at width ${viewport.width}`);
+            const preset = drink.button === 'spirit' ? 80 : 500;
+            await detail.locator(`.ingredient-portion-preset[data-amount="${preset}"]`).click();
+            assert(await detail.locator('.ingredient-portion-amount').inputValue() === String(preset)
+                && (await detail.locator('.ingredient-nutrition-heading').textContent()).includes(`${preset} ml`),
+            'drink presets set the volume and refresh nutrition');
+            await detail.locator('.ingredient-close-btn').click();
+        }
+
+        await page.locator('#btn-quick-beer').click();
+        const detail = page.locator('.ingredient-detail');
+        for (const unit of [{ value: 'dl', ml: 200 }, { value: 'ml', ml: 2 },
+            { value: 'cup', ml: 480 }, { value: 'glass', ml: 500 }, { value: 'l', ml: 2000 }]) {
+            await detail.locator('.ingredient-portion-amount').fill('2');
+            await detail.locator('.ingredient-amount-row select').selectOption(unit.value);
+            assert((await detail.locator('.ingredient-nutrition-heading').textContent()).includes(`${unit.ml} ml`),
+                `${unit.value} converts to millilitres for nutrition`);
+            assert((await detail.locator('[data-nutrient="protein"]').textContent()) === `${parseFloat((unit.ml / 100).toFixed(1))} g`,
+                `${unit.value} scales nutrient grams without changing their units`);
+        }
+        await detail.locator('.ingredient-portion-amount').fill('0');
+        await detail.locator('.ingredient-add-btn').click();
+        assert(await page.locator('.ingredient-confirmation').count() === 0
+            && await page.locator('.toast.error').count() > 0, 'invalid drink amount shows an error and cannot submit');
+        await detail.locator('.ingredient-portion-preset[data-amount="330"]').click();
+        await detail.locator('input[type="time"]').fill('18:30');
+        await detail.locator('.ingredient-meal-field select').selectOption('dinner');
+        await detail.locator('.ingredient-add-btn').click();
+        assert((await page.locator('.ingredient-confirmation-summary').textContent()).includes('330 ml'),
+            'drink confirmation labels the quantity in millilitres');
+        await page.locator('.ingredient-confirm-cancel').click();
+        assert(await page.evaluate(() => window.__drinkEntries.length) === 0, 'cancelling a drink does not save it');
+        await detail.locator('.ingredient-add-btn').click();
+        await page.evaluate(() => { window.__failDrinkSave = true; });
+        await page.locator('.ingredient-confirm-add').click();
+        await page.waitForFunction(() => !document.querySelector('.ingredient-confirm-add').disabled);
+        assert(await page.locator('.ingredient-confirmation').isVisible(), 'save failure leaves drink confirmation available for retry');
+        await page.evaluate(() => { window.__failDrinkSave = false; });
+        await page.locator('.ingredient-confirm-add').click();
+        await page.locator('.ingredient-detail').waitFor({ state: 'detached' });
+        await page.locator('.drink-item').waitFor();
+        const saved = await page.evaluate(() => window.__drinkEntries[0]);
+        assert(saved.mealType === 'dinner' && saved.consumptionTime === '18:30:00'
+            && saved.items[0].portionGrams === 330, 'confirmed drink saves volume, meal and time through the existing API');
+        assert((await page.locator('#drink-log-list').textContent()).includes('330 ml'),
+            'drink log refreshes after confirmation');
+        await navigate(page, 'dashboard', '#water-intake-tile .water-tile');
+        await page.locator('#water-intake-tile .water-tile').click();
+        await page.locator('.ingredient-detail').waitFor();
+        assert((await page.locator('.ingredient-nutrition-heading').textContent()).includes('200 ml'),
+            'dashboard quick drinks use the shared nutrition dialog');
+        await page.locator('.ingredient-close-btn').click();
+    } finally {
+        await context.close();
+    }
+}
+
+async function testCustomDrinkConsumption(browser) {
+    const { context, page } = await openPage(browser);
+    try {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await initializeApp(page);
+        await page.evaluate(() => {
+            API.browseFoods = async () => [{
+                id: 'custom-juice', nameEn: 'Apple juice', nameFi: 'Apple juice',
+                energyKcal: 45, protein: 0, fat: 0, carbohydrate: 11, sugar: 10
+            }];
+        });
+        await navigate(page, 'drinks', '#btn-add-custom-drink');
+        await page.locator('#btn-add-custom-drink').click();
+        await page.locator('#drink-name').fill('Apple');
+        await page.locator('#drink-search-results [data-id="custom-juice"]').click();
+        await page.locator('.ingredient-detail').waitFor();
+        assert((await page.locator('[data-nutrient="energy"]').textContent()).startsWith('90 kcal'),
+            'custom drink search opens the same scaled nutrition dialog');
+        await page.locator('.ingredient-portion-preset[data-amount="240"]').click();
+        await page.locator('.ingredient-add-btn').click();
+        await page.locator('.ingredient-confirm-add').click();
+        await page.locator('.ingredient-detail').waitFor({ state: 'detached' });
+        let drinks = await page.evaluate(() => app.getTodayDrinks());
+        assert(drinks.length === 1 && drinks[0].amountMl === 240 && drinks[0].calories === 108,
+            'custom drink retains local storage and cup-volume calorie calculation');
+
+        await page.locator('#btn-add-custom-drink').click();
+        await page.locator('#drink-name').fill('Manual smoothie');
+        await page.locator('#btn-drink-manual').click();
+        await page.locator('#drink-kcal').fill('60');
+        await page.locator('#drink-protein').fill('3');
+        await page.locator('#btn-drink-add').click();
+        assert((await page.locator('[data-nutrient="energy"]').textContent()).startsWith('120 kcal'),
+            'manually entered drink nutrition appears at the top of the shared dialog');
+        await page.locator('.ingredient-portion-preset[data-amount="500"]').click();
+        await page.locator('.ingredient-add-btn').click();
+        await page.locator('.ingredient-confirm-add').click();
+        await page.locator('.ingredient-detail').waitFor({ state: 'detached' });
+        drinks = await page.evaluate(() => app.getTodayDrinks());
+        assert(drinks.length === 2 && drinks[1].amountMl === 500 && drinks[1].calories === 300,
+            'manual drink confirmation preserves local persistence and scaled calories');
     } finally {
         await context.close();
     }
@@ -589,6 +757,29 @@ async function testIngredientConfirmation(browser, viewport) {
         }, food);
         await navigate(page, 'ingredients', '.ingredients');
         await page.locator('#ingredients-list .ingredient-card').click();
+        const detail = page.locator('.ingredient-detail');
+        const layout = await detail.evaluate(element => {
+            const rect = element.getBoundingClientRect();
+            const style = getComputedStyle(element);
+            return {
+                x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+                borderRadius: style.borderRadius,
+                horizontalOverflow: element.scrollWidth > element.clientWidth
+            };
+        });
+        if (viewport.width < 768) {
+            assert(layout.x === 0 && layout.y === 0
+                && layout.width === viewport.width && layout.height === viewport.height
+                && layout.borderRadius === '0px',
+            `ingredient consumption fills the mobile viewport at ${viewport.width}x${viewport.height}`);
+        } else {
+            assert(layout.width === 500 && layout.height <= viewport.height * 0.9
+                && Math.abs(layout.x - (viewport.width - layout.width) / 2) < 1
+                && Math.abs(layout.y - (viewport.height - layout.height) / 2) < 1
+                && layout.borderRadius === '12px',
+            `ingredient consumption retains the centered desktop dialog at width ${viewport.width}`);
+        }
+        assert(!layout.horizontalOverflow, 'ingredient consumption has no horizontal overflow');
         assert(!await page.locator('.ingredient-detail input').evaluateAll(inputs => inputs.includes(document.activeElement)),
             `opening ingredient consumption does not focus an input at width ${viewport.width}`);
         await page.locator('.ingredient-portion-preset[data-amount="25"]').click();
@@ -596,6 +787,11 @@ async function testIngredientConfirmation(browser, viewport) {
             'portion buttons update the amount without typing');
         assert(!await page.locator('.ingredient-portion-amount').evaluate(input => input === document.activeElement),
             'portion buttons do not focus the amount input');
+        await page.locator('.ingredient-close-btn').scrollIntoViewIfNeeded();
+        const closeButtonBounds = await page.locator('.ingredient-close-btn').boundingBox();
+        assert(closeButtonBounds && closeButtonBounds.y >= 0
+            && closeButtonBounds.y + closeButtonBounds.height <= viewport.height,
+        'Close remains reachable by scrolling the dialog');
         await page.locator('.ingredient-add-btn').click();
         const confirmation = page.locator('.ingredient-confirmation-content[role="dialog"]');
         assert(await confirmation.isVisible() && (await confirmation.textContent()).includes('Shared oats'),
@@ -697,6 +893,9 @@ async function testExplicitMealDatePassThrough(browser) {
         await testCheckinStepsAndFocus(browser);
         await testMetricsUnchangedAndMeasuredNow(browser);
         await testDrinkSelectionAndSharedConfirmation(browser);
+        await testSharedDrinkConsumption(browser, { width: 390, height: 844 }, 'en');
+        await testSharedDrinkConsumption(browser, { width: 1280, height: 900 }, 'fi');
+        await testCustomDrinkConsumption(browser);
         await testIngredientBarcodeAction(browser);
         await testManualIngredientCreation(browser);
         await testMealGroupingViews(browser);
@@ -704,7 +903,11 @@ async function testExplicitMealDatePassThrough(browser) {
         await testCategoryFiltering(browser);
         await testRecentSearchAndPagination(browser);
         await testIngredientConfirmation(browser, { width: 1280, height: 900 });
+        await testIngredientConfirmation(browser, { width: 768, height: 1024 });
+        await testIngredientConfirmation(browser, { width: 767, height: 1024 });
         await testIngredientConfirmation(browser, { width: 390, height: 844 });
+        await testIngredientConfirmation(browser, { width: 320, height: 568 });
+        await testIngredientConfirmation(browser, { width: 667, height: 375 });
         await testDirectIngredientConsumptionLocalDate(browser, {
             name: 'positive UTC offset near midnight',
             timezoneId: 'Asia/Kathmandu',

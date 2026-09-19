@@ -48,7 +48,7 @@ async function assertDialogSemantics(page, dialogSelector, expectedFocusSelector
     assert(semantics.titleId && semantics.titleIsInside, `${dialogSelector} has an associated unique title`);
     assert(semantics.allControlsHaveUniqueIds, `${dialogSelector} controls have unique IDs`);
     assert(semantics.allControlsHaveLabels, `${dialogSelector} controls have associated labels`);
-    assert(await page.locator(expectedFocusSelector).evaluate(element => element === document.activeElement), `${dialogSelector} sets initial focus`);
+    assert(await page.locator(expectedFocusSelector).evaluate(element => element === document.activeElement), `${dialogSelector} has the expected focus after opening`);
 }
 
 (async () => {
@@ -114,7 +114,7 @@ async function assertDialogSemantics(page, dialogSelector, expectedFocusSelector
 
         await page.locator('#btn-barcode-meal').focus();
         await openMealDialog(page, food);
-        await assertDialogSemantics(page, '.ingredient-detail[role="dialog"]', '.ingredient-portion-amount');
+        await assertDialogSemantics(page, '.ingredient-detail[role="dialog"]', '#btn-barcode-meal');
         await page.locator('.ingredient-add-btn').click();
         await assertDialogSemantics(page, '.ingredient-confirmation-content[role="dialog"]', '.ingredient-confirm-cancel');
         const dialogIds = await page.locator('.portion-dialog [id]').evaluateAll(elements => elements.map(element => element.id));

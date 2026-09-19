@@ -54,7 +54,61 @@ Object.assign(App.prototype, {
         return this._builtInDrinkCache[fineliId];
     },
 
+    getDrinkPortionOptions(fineliId, options = {}) {
+        const isSpirit = fineliId === 906;
+        const usesMl = [902, 906, 910, 920].includes(fineliId);
+        return {
+            defaultAmount: options.defaultAmount ?? (isSpirit ? 40 : usesMl ? 330 : 2),
+            defaultUnit: options.defaultUnit ?? (usesMl ? 'ml' : 'dl'),
+            presets: options.presets ?? (isSpirit ? [
+                { amount: 20, label: '2 cl' },
+                { amount: 40, label: '4 cl' },
+                { amount: 80, label: '8 cl' }
+            ] : [
+                { amount: 100, label: '1 dl' },
+                { amount: 200, label: '2 dl' },
+                { amount: 330, label: '330 ml' },
+                { amount: 500, label: '500 ml' },
+                { amount: 240, label: `1 ${this.t('unit_cup')}` }
+            ])
+        };
+    },
+
+    async refreshAfterDrinkAdded() {
+        try {
+            if (this.currentPage === 'drinks') {
+                this.renderDrinkFavorites();
+                await this.renderDrinkLog();
+            }
+            if (this.currentPage === 'dashboard') await this.navigate('dashboard', { history: 'none' });
+        } catch (e) {
+            console.error('Drink view refresh failed:', e);
+            this.showToast(this.t('error_loading'), 'error');
+        }
+    },
+
+    showDrinkConsumptionDialog(food, options = {}) {
+        this.showIngredientDetail(food, window.i18n?.lang || 'en', {
+            ...options,
+            drink: this.getDrinkPortionOptions(food.fineliId, options),
+            onAdded: () => this.refreshAfterDrinkAdded()
+        });
+    },
+
+    showLocalDrinkConsumptionDialog(food, returnFocus) {
+        this.showDrinkConsumptionDialog(food, {
+            returnFocus,
+            showMealContext: true,
+            onAdd: ({ name, portionGrams, nutrition, mealType, consumptionTime }) => {
+                const calories = Math.round(nutrition.energyKcal || 0);
+                this.addDrink(name, portionGrams, calories, mealType, consumptionTime);
+                this.showToast(`${name} — ${portionGrams} ml${calories > 0 ? ` (${calories} kcal)` : ''}`);
+            }
+        });
+    },
+
     async showQuickDrinkDialog(icon, fineliId, options = {}) {
+        const returnFocus = getIngredientFocusTarget();
         let food;
         try {
             food = await this.getBuiltInDrink(fineliId);
@@ -64,104 +118,7 @@ Object.assign(App.prototype, {
             return;
         }
 
-        const drinkName = this.getLocalizedName(food);
-        const defaultAmount = options.defaultAmount ?? 2;
-        const defaultUnit = options.defaultUnit ?? 'dl';
-        let selectedMealType = this.getEstimatedMealType();
-        const presets = options.presets ?? [
-            { amount: 100, label: '1 dl' },
-            { amount: 200, label: '2 dl' },
-            { amount: 330, label: '330 ml' },
-            { amount: 500, label: '500 ml' },
-            { amount: 240, label: `1 ${this.t('unit_cup')}` }
-        ];
-        const overlay = document.createElement('div');
-        overlay.className = 'portion-dialog';
-        overlay.innerHTML = `
-            <div class="portion-content drink-dialog">
-                <h3>${icon} ${drinkName}</h3>
-                <div class="drink-field">
-                    <label>${this.t('drink_amount_label')}</label>
-                    <div class="drink-amount-row">
-                        <input type="number" id="drink-amount" value="${defaultAmount}" min="0.1" step="0.5" />
-                        <select id="drink-unit">
-                            <option value="dl">${this.t('unit_dl')}</option>
-                            <option value="ml">${this.t('unit_ml')}</option>
-                            <option value="cup">${this.t('unit_cup')}</option>
-                            <option value="glass">${this.t('unit_glass')}</option>
-                            <option value="l">${this.t('unit_l')}</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="drink-presets">
-                    ${presets.map(preset => `<button class="btn btn-secondary btn-sm drink-preset" data-amount="${preset.amount}" data-unit="ml">${preset.label}</button>`).join('')}
-                </div>
-                <label>${this.t('meal_type_label')}</label>
-                <div class="meal-type-selector drink-meal-selector" role="radiogroup" aria-label="${this.t('meal_type_label')}">
-                    ${this.getMealTypes().map(mealType => `
-                        <button type="button" class="meal-type ${mealType === selectedMealType ? 'active' : ''}"
-                                data-meal-type="${mealType}" role="radio" aria-checked="${mealType === selectedMealType}">${this.t(`meal_${mealType}`)}</button>
-                    `).join('')}
-                </div>
-                <div class="consumption-time-field">
-                    <label for="quick-drink-consumption-time">${this.t('consumption_time')}</label>
-                    <input type="time" id="quick-drink-consumption-time" value="${this.getCurrentTimeValue()}" step="60" />
-                </div>
-                <div class="portion-buttons">
-                    <button class="btn btn-secondary" id="btn-drink-cancel">${this.t('btn_cancel')}</button>
-                    <button class="btn btn-primary" id="btn-drink-add">${this.t('btn_add')}</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-        this.dismissOverlayOnClickOutside(overlay);
-
-        const amountInput = overlay.querySelector('#drink-amount');
-        const unitSelect = overlay.querySelector('#drink-unit');
-        unitSelect.value = defaultUnit;
-
-        overlay.querySelectorAll('.drink-preset').forEach(btn => {
-            btn.addEventListener('click', () => {
-                amountInput.value = btn.dataset.amount;
-                unitSelect.value = 'ml';
-            });
-        });
-
-        overlay.querySelectorAll('.drink-meal-selector button').forEach(button => {
-            button.addEventListener('click', () => {
-                selectedMealType = button.dataset.mealType;
-                overlay.querySelectorAll('.drink-meal-selector button').forEach(candidate => {
-                    const selected = candidate === button;
-                    candidate.classList.toggle('active', selected);
-                    candidate.setAttribute('aria-checked', String(selected));
-                });
-            });
-        });
-
-        overlay.querySelector('#btn-drink-cancel').onclick = () => overlay.remove();
-        overlay.querySelector('#btn-drink-add').onclick = async () => {
-            const amount = parseFloat(amountInput.value) || 0;
-            const unit = unitSelect.value;
-            const ml = this.convertToMl(amount, unit);
-            if (ml > 0) {
-                const addButton = overlay.querySelector('#btn-drink-add');
-                addButton.disabled = true;
-                try {
-                    const today = this.getLocalDateValue();
-                    const consumptionTime = overlay.querySelector('#quick-drink-consumption-time').value;
-                    const entry = await API.createEntry({ entryDate: today, mealType: selectedMealType, consumptionTime: this.toApiConsumptionTime(consumptionTime) });
-                    await API.addEntryItem(entry.id, { foodItemId: food.id, portionGrams: ml });
-                    this.showToast(`${drinkName} — ${ml} ml`);
-                    overlay.remove();
-                    if (this.currentPage === 'drinks') await this.renderDrinkLog();
-                    if (this.currentPage === 'dashboard') this.navigate('dashboard', { history: 'none' });
-                } catch (e) {
-                    console.error('Built-in drink add failed:', e);
-                    addButton.disabled = false;
-                    this.showToast(this.t('add_failed'), 'error');
-                }
-            }
-        };
+        this.showDrinkConsumptionDialog(food, { ...options, returnFocus, icon });
     },
 
     showWaterDialog() {
@@ -173,31 +130,23 @@ Object.assign(App.prototype, {
     },
 
     showBeerDialog() {
-        return this.showQuickDrinkDialog('🍺', 902, { defaultAmount: 330, defaultUnit: 'ml' });
+        return this.showQuickDrinkDialog('🍺', 902);
     },
 
     showSoftDrinkSugarDialog() {
-        return this.showQuickDrinkDialog('🥤', 910, { defaultAmount: 330, defaultUnit: 'ml' });
+        return this.showQuickDrinkDialog('🥤', 910);
     },
 
     showSoftDrinkNoSugarDialog() {
-        return this.showQuickDrinkDialog('🥤', 920, { defaultAmount: 330, defaultUnit: 'ml' });
+        return this.showQuickDrinkDialog('🥤', 920);
     },
 
     showSpiritDialog() {
-        return this.showQuickDrinkDialog('🥃', 906, {
-            defaultAmount: 40,
-            defaultUnit: 'ml',
-            presets: [
-                { amount: 20, label: '2 cl' },
-                { amount: 40, label: '4 cl' },
-                { amount: 80, label: '8 cl' }
-            ]
-        });
+        return this.showQuickDrinkDialog('🥃', 906);
     },
 
     showDrinkDialog(prefilledName = '') {
-        let selectedMealType = this.getEstimatedMealType();
+        const returnFocus = getIngredientFocusTarget();
         const overlay = document.createElement('div');
         overlay.className = 'portion-dialog';
         overlay.innerHTML = `
@@ -214,44 +163,13 @@ Object.assign(App.prototype, {
                 </div>
                 <div class="drink-field drink-name-field">
                     <label>${this.t('drink_name_label')}</label>
-                    <input type="text" id="drink-name" value="${prefilledName}" placeholder="${this.t('drink_name_placeholder')}" autocomplete="off" />
+                    <input type="text" id="drink-name" value="${escapeIngredientHtml(prefilledName)}" placeholder="${this.t('drink_name_placeholder')}" autocomplete="off" />
                     <div id="drink-search-results" class="drink-search-dropdown"></div>
-                </div>
-                <div class="drink-field">
-                    <label>${this.t('drink_amount_label')}</label>
-                    <div class="drink-amount-row">
-                        <input type="number" id="drink-amount" value="2" min="0.1" step="0.5" />
-                        <select id="drink-unit">
-                            <option value="dl">${this.t('unit_dl')}</option>
-                            <option value="ml">${this.t('unit_ml')}</option>
-                            <option value="cup">${this.t('unit_cup')}</option>
-                            <option value="glass">${this.t('unit_glass')}</option>
-                            <option value="l">${this.t('unit_l')}</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="drink-presets">
-                    <button class="btn btn-secondary btn-sm drink-preset" data-amount="100" data-unit="ml">1 dl</button>
-                    <button class="btn btn-secondary btn-sm drink-preset" data-amount="200" data-unit="ml">2 dl</button>
-                    <button class="btn btn-secondary btn-sm drink-preset" data-amount="330" data-unit="ml">330 ml</button>
-                    <button class="btn btn-secondary btn-sm drink-preset" data-amount="500" data-unit="ml">500 ml</button>
-                    <button class="btn btn-secondary btn-sm drink-preset" data-amount="240" data-unit="ml">1 ${this.t('unit_cup')}</button>
-                </div>
-                <label>${this.t('meal_type_label')}</label>
-                <div class="meal-type-selector drink-meal-selector" role="radiogroup" aria-label="${this.t('meal_type_label')}">
-                    ${this.getMealTypes().map(mealType => `
-                        <button type="button" class="meal-type ${mealType === selectedMealType ? 'active' : ''}"
-                                data-meal-type="${mealType}" role="radio" aria-checked="${mealType === selectedMealType}">${this.t(`meal_${mealType}`)}</button>
-                    `).join('')}
-                </div>
-                <div class="consumption-time-field">
-                    <label for="drink-consumption-time">${this.t('consumption_time')}</label>
-                    <input type="time" id="drink-consumption-time" value="${this.getCurrentTimeValue()}" step="60" />
                 </div>
                 <div id="drink-nutrition-section" class="drink-nutrition-section" style="display:none;">
                     <div class="nutrition-label-header">${this.t('nutrition_facts')}</div>
                     <table class="nutrition-label-table">
-                        <thead><tr><th colspan="2">${this.t('per_100g')}</th></tr></thead>
+                        <thead><tr><th colspan="2">${this.t('per_100ml')}</th></tr></thead>
                         <tbody>
                             <tr><td>${this.t('energy')}</td><td><input type="number" id="drink-kcal" step="0.1" min="0" class="nutrition-input-sm" /> kcal</td></tr>
                             <tr><td>${this.t('fat_short')}</td><td><input type="number" id="drink-fat" step="0.1" min="0" class="nutrition-input-sm" /> g</td></tr>
@@ -274,15 +192,13 @@ Object.assign(App.prototype, {
                 </div>
                 <div class="portion-buttons">
                     <button class="btn btn-secondary" id="btn-drink-cancel">${this.t('btn_cancel')}</button>
-                    <button class="btn btn-primary" id="btn-drink-add">${this.t('btn_add')}</button>
+                    <button class="btn btn-primary" id="btn-drink-add">${this.t('btn_next')}</button>
                 </div>
             </div>
         `;
         document.body.appendChild(overlay);
         this.dismissOverlayOnClickOutside(overlay);
 
-        const amountInput = overlay.querySelector('#drink-amount');
-        const unitSelect = overlay.querySelector('#drink-unit');
         const nameInput = overlay.querySelector('#drink-name');
         const nutritionSection = overlay.querySelector('#drink-nutrition-section');
         const nutritionLoading = overlay.querySelector('#drink-nutrition-loading');
@@ -290,33 +206,14 @@ Object.assign(App.prototype, {
         const searchDropdown = overlay.querySelector('#drink-search-results');
         const favBtn = overlay.querySelector('#btn-drink-fav');
         const categorySelect = overlay.querySelector('#drink-category');
-        let drinkFoodId = null;
-        let drinkNutritionData = null;
         let nutritionSearchTimeout = null;
         let hasNutrition = false;
         let customRecipes = null;
 
-        const fillNutritionFields = (data) => {
-            overlay.querySelector('#drink-kcal').value = data.energyKcal ?? data.calories ?? '';
-            overlay.querySelector('#drink-fat').value = data.fat ?? '';
-            overlay.querySelector('#drink-saturated-fat').value = data.saturatedFat ?? '';
-            overlay.querySelector('#drink-carbs').value = data.carbohydrate ?? data.carbs ?? '';
-            overlay.querySelector('#drink-sugar').value = data.sugar ?? '';
-            overlay.querySelector('#drink-protein').value = data.protein ?? '';
-            overlay.querySelector('#drink-salt').value = data.salt ?? '';
-            nutritionSection.style.display = 'block';
-            hasNutrition = true;
-            updateFavBtn();
-        };
-
         const selectDrinkFood = (match) => {
-            drinkFoodId = match.id;
-            drinkNutritionData = match;
-            nameInput.value = this.getLocalizedName(match);
-            fillNutritionFields(match);
-            searchDropdown.innerHTML = '';
-            searchDropdown.style.display = 'none';
-            noResultsSection.style.display = 'none';
+            clearTimeout(nutritionSearchTimeout);
+            overlay.remove();
+            this.showLocalDrinkConsumptionDialog(match, returnFocus);
         };
 
         const updateFavBtn = () => {
@@ -328,7 +225,7 @@ Object.assign(App.prototype, {
                 favBtn.classList.remove('disabled');
                 favBtn.title = this.t('toggle_favorite');
             }
-            const favId = drinkFoodId || ('drink_' + drinkName.toLowerCase());
+            const favId = 'drink_' + drinkName.toLowerCase();
             const isFav = drinkName ? this.isFavorite(favId) : false;
             favBtn.textContent = isFav ? '★' : '☆';
             favBtn.classList.toggle('active', isFav);
@@ -364,9 +261,8 @@ Object.assign(App.prototype, {
                     el.querySelector('.drink-recipe-name').textContent = recipe?.name || '';
                     el.addEventListener('click', () => {
                         if (!recipe) return;
-                        const consumptionTime = overlay.querySelector('#drink-consumption-time').value;
                         overlay.remove();
-                        this.showRecipePortionSelector(recipe, selectedMealType, consumptionTime);
+                        this.showRecipePortionSelector(recipe, this.getEstimatedMealType(), this.getCurrentTimeValue());
                     });
                 });
             } else {
@@ -433,8 +329,6 @@ Object.assign(App.prototype, {
 
         nameInput?.addEventListener('input', () => {
             clearTimeout(nutritionSearchTimeout);
-            drinkFoodId = null;
-            drinkNutritionData = null;
             nutritionSection.style.display = 'none';
             noResultsSection.style.display = 'none';
             hasNutrition = false;
@@ -500,7 +394,7 @@ Object.assign(App.prototype, {
         favBtn.onclick = () => {
             const drinkName = nameInput.value.trim();
             if (!drinkName || !hasNutrition) return;
-            const favId = drinkFoodId || ('drink_' + drinkName.toLowerCase());
+            const favId = 'drink_' + drinkName.toLowerCase();
             this.toggleFavorite({
                 id: favId,
                 name: drinkName,
@@ -513,40 +407,24 @@ Object.assign(App.prototype, {
             updateFavBtn();
         };
 
-        overlay.querySelectorAll('.drink-preset').forEach(btn => {
-            btn.addEventListener('click', () => {
-                amountInput.value = btn.dataset.amount;
-                unitSelect.value = 'ml';
-            });
-        });
-
-        overlay.querySelectorAll('.drink-meal-selector button').forEach(button => {
-            button.addEventListener('click', () => {
-                selectedMealType = button.dataset.mealType;
-                overlay.querySelectorAll('.drink-meal-selector button').forEach(candidate => {
-                    const selected = candidate === button;
-                    candidate.classList.toggle('active', selected);
-                    candidate.setAttribute('aria-checked', String(selected));
-                });
-            });
-        });
-
         overlay.querySelector('#btn-drink-cancel').onclick = () => overlay.remove();
-        overlay.querySelector('#btn-drink-add').onclick = async () => {
+        overlay.querySelector('#btn-drink-add').onclick = () => {
             const name = nameInput.value.trim() || this.t('drink_default');
-            const amount = parseFloat(amountInput.value) || 0;
-            const unit = unitSelect.value;
-            const ml = this.convertToMl(amount, unit);
-            if (ml > 0) {
-                const kcalPer100 = parseFloat(overlay.querySelector('#drink-kcal')?.value) || 0;
-                const drinkCalories = kcalPer100 > 0 ? Math.round(kcalPer100 * ml / 100) : 0;
-                const consumptionTime = overlay.querySelector('#drink-consumption-time').value;
-                this.addDrink(name, ml, drinkCalories, selectedMealType, consumptionTime);
-                this.showToast(`${name} — ${ml} ml${drinkCalories > 0 ? ` (${drinkCalories} kcal)` : ''}`);
-                overlay.remove();
-                if (this.currentPage === 'drinks') this.renderDrinkLog();
-                if (this.currentPage === 'dashboard') this.refreshDashboardDrinks();
-            }
+            const food = {
+                id: 'drink_' + name.toLowerCase(),
+                nameEn: name,
+                nameFi: name,
+                energyKcal: parseFloat(overlay.querySelector('#drink-kcal').value) || 0,
+                fat: parseFloat(overlay.querySelector('#drink-fat').value) || 0,
+                saturatedFat: parseFloat(overlay.querySelector('#drink-saturated-fat').value) || 0,
+                carbohydrate: parseFloat(overlay.querySelector('#drink-carbs').value) || 0,
+                sugar: parseFloat(overlay.querySelector('#drink-sugar').value) || 0,
+                protein: parseFloat(overlay.querySelector('#drink-protein').value) || 0,
+                salt: parseFloat(overlay.querySelector('#drink-salt').value) || 0
+            };
+            clearTimeout(nutritionSearchTimeout);
+            overlay.remove();
+            this.showLocalDrinkConsumptionDialog(food, returnFocus);
         };
 
         if (!prefilledName) nameInput.focus();

@@ -4,6 +4,7 @@ A comprehensive calorie intake and wellness tracking application built with ASP.
 
 ## Features
 
+- **Drink logging:** Drinks use the ingredient consumption dialog with nutrition above the amount controls, volume units and drink presets. The dialog fills mobile screens and stays centered on desktop. Custom drinks are selected or entered before choosing the amount and confirming consumption.
 - **Meal Logging** — Search Finnish foods (Fineli database), log meals with portions
 - 📸 **AI Food Recognition** — Take a photo, Azure OpenAI identifies ingredients
 - 🛏️ **Daily Wellness Check-ins** — Sleep, mood, energy, stress, water, exercise, alcohol, steps

@@ -838,6 +838,21 @@ input[type="date"], input[type="time"] {
     max-width: 520px;
 }
 
+@media (max-width: 767px) {
+    .portion-content.ingredient-detail {
+        width: 100%;
+        max-width: none;
+        height: 100vh;
+        height: 100dvh;
+        max-height: 100vh;
+        max-height: 100dvh;
+        border-radius: 0;
+        padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+            max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+        overscroll-behavior-y: contain;
+    }
+}
+
 /* Dialog close button */
 .dialog-close-btn {
     position: absolute;

@@ -278,6 +278,9 @@ Object.assign(App.prototype, {
     },
 
     showIngredientDetail(food, lang, options = {}) {
+        const drink = options.drink ?? (this.getBuiltInDrinkFineliIds().includes(food.fineliId)
+            ? this.getDrinkPortionOptions(food.fineliId) : null);
+        const showMealContext = !options.onAdd || options.showMealContext;
         const name = lang === 'fi' ? (food.nameFi || food.nameEn) : (food.nameEn || food.nameFi);
         const secondary = lang === 'fi' ? food.nameEn : food.nameFi;
         const returnFocus = options.returnFocus ?? getIngredientFocusTarget();
@@ -306,7 +309,7 @@ Object.assign(App.prototype, {
         overlay.innerHTML = `
             <div class="portion-content ingredient-detail" role="dialog" aria-modal="true" aria-labelledby="${ids.title}">
                 <div class="portion-header">
-                    <h3 class="ingredient-detail-title" id="${ids.title}">${escapeIngredientHtml(name)}</h3>
+                    <h3 class="ingredient-detail-title" id="${ids.title}">${options.icon ? `${escapeIngredientHtml(options.icon)} ` : ''}${escapeIngredientHtml(name)}</h3>
                     ${food.isUserCreated ? `<button class="btn btn-secondary btn-sm ingredient-edit-btn" type="button">${this.t('btn_edit')}</button>` : ''}
                     <button class="btn-favorite btn-ingredient-favorite ${isFavorite ? 'active' : ''}" id="${ids.favorite}"
                             title="${this.t('toggle_favorite')}" aria-label="${this.t('toggle_favorite')}">${isFavorite ? '★' : '☆'}</button>
@@ -325,7 +328,7 @@ Object.assign(App.prototype, {
                     <tr><td>${this.t('salt')}</td><td class="nutrient-value" data-nutrient="salt"></td></tr>
                 </table>
                 ${food.fineliId ? `<p class="ingredient-source">Fineli #${food.fineliId}</p>` : ''}
-                <div class="ingredient-weight-settings">
+                ${drink ? '' : `<div class="ingredient-weight-settings">
                     <h4>${this.t('ingredient_weights_title')}</h4>
                     <div class="ingredient-weight-grid">
                         <label for="${ids.defaultWeight}">${this.t('default_weight_grams')}</label>
@@ -334,21 +337,23 @@ Object.assign(App.prototype, {
                         <input type="number" id="${ids.unitWeight}" value="${unitWeightGrams ?? ''}" min="0.1" step="0.1" />
                     </div>
                     <button type="button" class="btn btn-secondary btn-sm ingredient-save-weights">${this.t('btn_save')}</button>
-                </div>
+                </div>`}
                 <div class="ingredient-consumption">
                     <h4>${this.t('add_as_consumption')}</h4>
                     <label for="${ids.amount}">${this.t('ingredient_amount_label')}</label>
                     <div class="ingredient-amount-row">
-                        <input class="ingredient-portion-amount" type="number" id="${ids.amount}" value="${unitWeightGrams ? 1 : defaultPortionGrams}" min="0.1" step="0.1" />
+                        <input class="ingredient-portion-amount" type="number" id="${ids.amount}" value="${drink ? drink.defaultAmount : (unitWeightGrams ? 1 : defaultPortionGrams)}" min="0.1" step="${drink ? '0.5' : '0.1'}" />
                         <label class="visually-hidden" for="${ids.unit}">${this.t('unit_singular')}</label>
                         <select id="${ids.unit}">
-                            <option value="g">${this.t('unit_grams')}</option>
-                            <option value="unit" ${unitWeightGrams ? 'selected' : 'disabled'}>${this.t('unit_singular')}</option>
+                            ${drink ? ['dl', 'ml', 'cup', 'glass', 'l'].map(unit =>
+                                `<option value="${unit}" ${unit === drink.defaultUnit ? 'selected' : ''}>${this.t(`unit_${unit}`)}</option>`
+                            ).join('') : `<option value="g">${this.t('unit_grams')}</option>
+                            <option value="unit" ${unitWeightGrams ? 'selected' : 'disabled'}>${this.t('unit_singular')}</option>`}
                         </select>
                     </div>
                     <div class="ingredient-portion-presets">
                     </div>
-                    ${options.onAdd ? '' : `<div class="consumption-time-field">
+                    ${!showMealContext ? '' : `<div class="consumption-time-field">
                         <label for="${ids.consumptionTime}">${this.t('consumption_time')}</label>
                         <input type="time" id="${ids.consumptionTime}" value="${this.getCurrentTimeValue()}" step="60" />
                     </div>
@@ -385,10 +390,17 @@ Object.assign(App.prototype, {
         const getPortionGrams = () => {
             const amount = parseFloat(amountInput.value);
             if (!Number.isFinite(amount) || amount <= 0) return 0;
+            if (drink) return this.convertToMl(amount, unitSelect.value);
             if (unitSelect.value === 'unit') return unitWeightGrams ? amount * unitWeightGrams : 0;
             return amount;
         };
         const renderPortionPresets = () => {
+            if (drink) {
+                overlay.querySelector('.ingredient-portion-presets').innerHTML = drink.presets.map(preset =>
+                    `<button type="button" class="btn btn-secondary btn-sm ingredient-portion-preset" data-amount="${preset.amount}">${escapeIngredientHtml(preset.label)}</button>`
+                ).join('');
+                return;
+            }
             const presets = unitSelect.value === 'unit' ? unitPresets : portionPresets;
             const isUnit = unitSelect.value === 'unit';
             overlay.querySelector('.ingredient-portion-presets').innerHTML = presets.map(portion =>
@@ -410,7 +422,7 @@ Object.assign(App.prototype, {
         const updateNutritionTable = () => {
             const portionGrams = getPortionGrams();
             const nutrition = getNutrition(portionGrams);
-            overlay.querySelector(`#${ids.nutrition}`).textContent = this.t('nutrition_for_portion', { amount: fmt(portionGrams) });
+            overlay.querySelector(`#${ids.nutrition}`).textContent = this.t(drink ? 'nutrition_for_drink_portion' : 'nutrition_for_portion', { amount: fmt(portionGrams) });
             overlay.querySelector('[data-nutrient="energy"]').textContent = `${Math.round(nutrition.energyKcal || 0)} kcal${nutrition.energyKj ? ` / ${Math.round(nutrition.energyKj)} kJ` : ''}`;
             ['protein', 'fat', 'saturatedFat', 'carbohydrate', 'sugar', 'fiber', 'salt'].forEach(nutrient => {
                 overlay.querySelector(`[data-nutrient="${nutrient}"]`).textContent = `${fmt(nutrition[nutrient])} g`;
@@ -428,7 +440,7 @@ Object.assign(App.prototype, {
             renderPortionPresets();
             updateNutritionTable();
         });
-        overlay.querySelector('.ingredient-save-weights').addEventListener('click', async event => {
+        overlay.querySelector('.ingredient-save-weights')?.addEventListener('click', async event => {
             const parsedDefaultWeight = parseFloat(defaultWeightInput.value);
             const unitWeightText = unitWeightInput.value.trim();
             const parsedUnitWeight = unitWeightText ? parseFloat(unitWeightText) : null;
@@ -468,7 +480,12 @@ Object.assign(App.prototype, {
             const button = event.target.closest('.ingredient-portion-preset');
             if (!button) return;
             const currentAmount = Number(amountInput.value) || 0;
-            amountInput.value = parseFloat((currentAmount + Number(button.dataset.amount)).toFixed(1));
+            if (drink) {
+                amountInput.value = button.dataset.amount;
+                unitSelect.value = 'ml';
+            } else {
+                amountInput.value = parseFloat((currentAmount + Number(button.dataset.amount)).toFixed(1));
+            }
             updateNutritionTable();
         });
         renderPortionPresets();
@@ -479,7 +496,7 @@ Object.assign(App.prototype, {
             this.toggleFavorite({
                 id: food.id,
                 name,
-                type: 'food',
+                type: drink ? 'drink' : 'food',
                 kcalPer100: Number(food.energyKcal) || 0,
                 protein: Number(food.protein) || 0,
                 fat: Number(food.fat) || 0,
@@ -502,7 +519,10 @@ Object.assign(App.prototype, {
         });
         overlay.querySelector('.ingredient-add-btn').addEventListener('click', event => {
             const portionGrams = getPortionGrams();
-            if (portionGrams <= 0) return;
+            if (portionGrams <= 0) {
+                this.showToast(this.t('ingredient_amount_invalid'), 'error');
+                return;
+            }
             const nutrition = getNutrition(portionGrams);
             const mealContext = options.getMealContext?.() || {};
             const mealType = mealContext.mealType || mealTypeSelect.value;
@@ -514,10 +534,10 @@ Object.assign(App.prototype, {
             confirmation.className = 'portion-dialog ingredient-confirmation';
             confirmation.innerHTML = `
                 <div class="portion-content ingredient-confirmation-content" role="dialog" aria-modal="true" aria-labelledby="${confirmationTitleId}">
-                    <h3 id="${confirmationTitleId}">${this.t('confirm_ingredient_add')}</h3>
+                    <h3 id="${confirmationTitleId}">${this.t(drink ? 'confirm_drink_add' : 'confirm_ingredient_add')}</h3>
                     <div class="ingredient-confirmation-summary">
                         <strong>${escapeIngredientHtml(name)}</strong>
-                        <span>${this.t(`meal_${mealType}`)} · ${consumptionTime} · ${fmt(portionGrams)} g</span>
+                        <span>${this.t(`meal_${mealType}`)} · ${consumptionTime} · ${fmt(portionGrams)} ${drink ? this.t('unit_ml') : 'g'}</span>
                     </div>
                     <table class="nutrient-table">
                         <tr><td>${this.t('energy')}</td><td class="nutrient-value">${Math.round(nutrition.energyKcal || 0)} kcal${nutrition.energyKj ? ` / ${Math.round(nutrition.energyKj)} kJ` : ''}</td></tr>
@@ -541,24 +561,25 @@ Object.assign(App.prototype, {
             confirmation.querySelector('.ingredient-confirm-add').addEventListener('click', async () => {
                 const confirmationButtons = confirmation.querySelectorAll('button');
                 confirmationButtons.forEach(item => { item.disabled = true; });
-                if (options.onAdd) {
-                    options.onAdd({ food, name, portionGrams, nutrition });
-                    closeConfirmation(false);
-                    closeDetail();
-                    return;
-                }
                 try {
-                    const today = this.getLocalDateValue();
-                    const entry = await API.createEntry({ entryDate: today, mealType, consumptionTime: this.toApiConsumptionTime(consumptionTime) });
-                    await API.addEntryItem(entry.id, { foodItemId: food.id, portionGrams });
-                    this.saveRecentFoods([{ id: food.id, name, calories: nutrition.energyKcal, portion: portionGrams }]);
-                    closeConfirmation(false);
-                    closeDetail();
-                    this.showToast(this.t('ingredient_consumption_added'));
+                    if (options.onAdd) {
+                        await options.onAdd({ food, name, portionGrams, nutrition, mealType, consumptionTime });
+                    } else {
+                        const today = this.getLocalDateValue();
+                        const entry = await API.createEntry({ entryDate: today, mealType, consumptionTime: this.toApiConsumptionTime(consumptionTime) });
+                        await API.addEntryItem(entry.id, { foodItemId: food.id, portionGrams });
+                        this.saveRecentFoods([{ id: food.id, name, calories: nutrition.energyKcal, portion: portionGrams }]);
+                        this.showToast(this.t('ingredient_consumption_added'));
+                    }
                 } catch (e) {
+                    console.error('Consumption add failed:', e);
                     confirmationButtons.forEach(item => { item.disabled = false; });
                     this.showToast(this.t('add_failed'), 'error');
+                    return;
                 }
+                closeConfirmation(false);
+                closeDetail();
+                options.onAdded?.();
             });
             confirmationCancel.focus();
         });
