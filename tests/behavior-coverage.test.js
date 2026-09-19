@@ -562,7 +562,7 @@ async function testRecentSearchAndPagination(browser) {
     }
 }
 
-async function testIngredientConfirmation(browser) {
+async function testIngredientConfirmation(browser, viewport) {
     const { context, page } = await openPage(browser);
     const food = {
         id: 'shared-food',
@@ -575,6 +575,7 @@ async function testIngredientConfirmation(browser) {
         carbohydrate: 60
     };
     try {
+        await page.setViewportSize(viewport);
         await initializeApp(page);
         await page.evaluate(item => {
             window.__entryPayload = null;
@@ -588,18 +589,25 @@ async function testIngredientConfirmation(browser) {
         }, food);
         await navigate(page, 'ingredients', '.ingredients');
         await page.locator('#ingredients-list .ingredient-card').click();
+        assert(!await page.locator('.ingredient-detail input').evaluateAll(inputs => inputs.includes(document.activeElement)),
+            `opening ingredient consumption does not focus an input at width ${viewport.width}`);
+        await page.locator('.ingredient-portion-preset[data-amount="25"]').click();
+        assert(await page.locator('.ingredient-portion-amount').inputValue() === '125',
+            'portion buttons update the amount without typing');
+        assert(!await page.locator('.ingredient-portion-amount').evaluate(input => input === document.activeElement),
+            'portion buttons do not focus the amount input');
         await page.locator('.ingredient-add-btn').click();
         const confirmation = page.locator('.ingredient-confirmation-content[role="dialog"]');
         assert(await confirmation.isVisible() && (await confirmation.textContent()).includes('Shared oats'),
             'task 3: Ingredients uses the shared confirmation before adding consumption');
-        assert((await confirmation.textContent()).includes('360 kcal'),
+        assert((await confirmation.textContent()).includes('450 kcal'),
             'task 3: shared confirmation displays portion nutrition');
         await page.locator('.ingredient-confirm-add').click();
         await page.waitForFunction(() => window.__itemPayload !== null);
         const payloads = await page.evaluate(() => ({ entry: window.__entryPayload, item: window.__itemPayload }));
         assert(payloads.entry.mealType && /^\d{2}:\d{2}:00$/.test(payloads.entry.consumptionTime),
             'task 3: confirmation submits the selected meal context');
-        assert(payloads.item.foodItemId === food.id && payloads.item.portionGrams === 100,
+        assert(payloads.item.foodItemId === food.id && payloads.item.portionGrams === 125,
             'task 3: confirmation submits the selected ingredient and portion');
     } finally {
         await context.close();
@@ -695,7 +703,8 @@ async function testExplicitMealDatePassThrough(browser) {
         await testIdentifyFoodRemoval(browser);
         await testCategoryFiltering(browser);
         await testRecentSearchAndPagination(browser);
-        await testIngredientConfirmation(browser);
+        await testIngredientConfirmation(browser, { width: 1280, height: 900 });
+        await testIngredientConfirmation(browser, { width: 390, height: 844 });
         await testDirectIngredientConsumptionLocalDate(browser, {
             name: 'positive UTC offset near midnight',
             timezoneId: 'Asia/Kathmandu',

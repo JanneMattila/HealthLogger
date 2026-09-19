@@ -562,7 +562,6 @@ Object.assign(App.prototype, {
             });
             confirmationCancel.focus();
         });
-        amountInput.focus();
     },
 
     async showIngredientEditor(food, lang, options = {}) {
