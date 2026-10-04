@@ -1,4 +1,12 @@
 // Recipes view
+const escapeRecipeHtml = value => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+let recipeConfirmationSequence = 0;
+
 Object.assign(App.prototype, {
     async setupRecipes() {
         const listView = document.getElementById('recipe-list-view');
@@ -150,7 +158,7 @@ Object.assign(App.prototype, {
             }
 
             content.innerHTML = `
-                <h3>${recipe.name}</h3>
+                <h3>${escapeRecipeHtml(recipe.name)}</h3>
                 ${recipe.description ? `<p>${recipe.description}</p>` : ''}
                 <div class="recipe-total">${this.formatTotalCalories(totalKcal)}</div>
                 ${nutritionHtml}
@@ -709,30 +717,74 @@ Object.assign(App.prototype, {
         updateSummary();
 
         overlay.querySelector('#btn-rp-cancel').onclick = () => overlay.remove();
-        overlay.querySelector('#btn-rp-add').onclick = async () => {
+        overlay.querySelector('#btn-rp-add').onclick = event => {
             const value = mode === 'quantity'
                 ? parseFloat(quantityInput.value)
                 : mode === 'percent'
                     ? parseFloat(percentInput.value)
                     : parseFloat(gramsInput.value);
             if (!Number.isFinite(value) || value <= 0) return;
-            try {
-                const consumptionTime = overlay.querySelector('#recipe-consumption-time').value;
-                const opts = mode === 'grams'
-                    ? { portionGrams: value }
-                    : { portionMultiplier: mode === 'percent' ? value / 100 : value };
-                await API.addRecipeAsMeal(recipe.id, {
-                    entryDate: mealDate || this.getLocalDateValue(),
-                    mealType: selectedMealType,
-                    consumptionTime: this.toApiConsumptionTime(consumptionTime),
-                    ...opts
-                });
-                this.showToast(this.t('recipe_added'));
+            const multiplier = selectedMultiplier();
+            const grams = baseWeight * multiplier;
+            const calories = baseCalories * multiplier;
+            const nutrientValues = baseNutrients.map(nutrient => nutrient * multiplier);
+            const consumptionTime = overlay.querySelector('#recipe-consumption-time').value;
+            const opts = mode === 'grams'
+                ? { portionGrams: value }
+                : { portionMultiplier: mode === 'percent' ? value / 100 : value };
+            const confirmation = document.createElement('div');
+            const confirmationTitleId = `recipe-confirmation-${++recipeConfirmationSequence}-title`;
+            const confirmationReturnFocus = event.currentTarget;
+            const formatNutrient = nutrient => parseFloat(Number(nutrient || 0).toFixed(1));
+            confirmation.className = 'portion-dialog ingredient-confirmation';
+            confirmation.innerHTML = `
+                <div class="portion-content ingredient-confirmation-content" role="dialog" aria-modal="true" aria-labelledby="${confirmationTitleId}">
+                    <h3 id="${confirmationTitleId}">${this.t('confirm_recipe_add')}</h3>
+                    <div class="ingredient-confirmation-summary">
+                        <strong>${escapeRecipeHtml(recipe.name)}</strong>
+                        <span>${this.t(`meal_${selectedMealType}`)} · ${consumptionTime} · ${formatNutrient(grams)} g</span>
+                    </div>
+                    <table class="nutrient-table">
+                        <tr><td>${this.t('energy')}</td><td class="nutrient-value">${Math.round(calories)} kcal</td></tr>
+                        <tr><td>${this.t('protein_short')}</td><td class="nutrient-value">${formatNutrient(nutrientValues[0])} g</td></tr>
+                        <tr><td>${this.t('fat_short')}</td><td class="nutrient-value">${formatNutrient(nutrientValues[1])} g</td></tr>
+                        <tr><td>${this.t('carbs_short')}</td><td class="nutrient-value">${formatNutrient(nutrientValues[3])} g</td></tr>
+                    </table>
+                    <div class="portion-buttons">
+                        <button type="button" class="btn btn-secondary recipe-confirm-cancel">${this.t('btn_cancel')}</button>
+                        <button type="button" class="btn btn-primary recipe-confirm-add">${this.t('btn_add')}</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(confirmation);
+            const closeConfirmation = (restoreFocus = true) => {
+                confirmation.remove();
+                if (restoreFocus && confirmationReturnFocus.isConnected) confirmationReturnFocus.focus();
+            };
+            this.dismissOverlayOnClickOutside(confirmation, closeConfirmation);
+            const confirmationCancel = confirmation.querySelector('.recipe-confirm-cancel');
+            confirmationCancel.addEventListener('click', closeConfirmation);
+            confirmation.querySelector('.recipe-confirm-add').addEventListener('click', async () => {
+                const confirmationButtons = confirmation.querySelectorAll('button');
+                confirmationButtons.forEach(button => { button.disabled = true; });
+                try {
+                    await API.addRecipeAsMeal(recipe.id, {
+                        entryDate: mealDate || this.getLocalDateValue(),
+                        mealType: selectedMealType,
+                        consumptionTime: this.toApiConsumptionTime(consumptionTime),
+                        ...opts
+                    });
+                    this.showToast(this.t('recipe_added'));
+                } catch (e) {
+                    console.error('Recipe consumption add failed:', e);
+                    confirmationButtons.forEach(button => { button.disabled = false; });
+                    this.showToast(this.t('add_failed'), 'error');
+                    return;
+                }
+                closeConfirmation(false);
                 overlay.remove();
                 this.navigate('dashboard');
-            } catch (e) {
-                this.showToast(this.t('add_failed'), 'error');
-            }
+            });
+            confirmationCancel.focus();
         };
     }
 });

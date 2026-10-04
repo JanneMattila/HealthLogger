@@ -404,10 +404,12 @@ h3 { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
 .meal-source-empty { color: var(--text-secondary); padding: 1rem 0; }
 .meal-category-filter { display: grid; gap: 0.35rem; }
 .meal-category-filter label { color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; }
+.meal-composer .food-search input { padding: 0.6rem; background: var(--bg); }
 .meal-composer .search-results { max-height: 520px; }
 .meal-composer-items { padding: 1rem; position: sticky; top: calc(var(--header-height) + 1rem); }
 .meal-composer-items h3 { margin-top: 0; }
-.meal-save-button { width: 100%; margin-top: 1rem; }
+.meal-composer-actions { display: flex; gap: 0.5rem; }
+.meal-save-button { margin: 0; }
 
 @media (max-width: 900px) {
     .meal-composer-grid { grid-template-columns: 1fr; }
@@ -416,6 +418,7 @@ h3 { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
 
 @media (max-width: 520px) {
     .meal-date-time-grid { grid-template-columns: 1fr; }
+    .meal-composer-actions .btn { flex: 1; }
     .meal-source-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .meal-source-tab { padding-inline: 0.5rem; }
 }

@@ -1,4 +1,4 @@
-const CACHE_VERSION = '00000000000000';
+const CACHE_VERSION = '20261004105133';
 const CACHE_NAME = `HealthLogger-v${CACHE_VERSION}`;
 const STATIC_ASSETS = [
     '/',

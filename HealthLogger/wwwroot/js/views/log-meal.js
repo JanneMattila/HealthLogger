@@ -1,7 +1,61 @@
 // Log Meal view
+const mealDraftStorageKey = 'HealthLogger_addMealDraft';
+
 Object.assign(App.prototype, {
+    loadMealDraft() {
+        try {
+            const draft = JSON.parse(localStorage.getItem(mealDraftStorageKey) || 'null');
+            return draft && typeof draft === 'object' && Array.isArray(draft.items) ? draft : null;
+        } catch (error) {
+            console.error('Meal draft load failed:', error);
+            localStorage.removeItem(mealDraftStorageKey);
+            return null;
+        }
+    },
+
+    persistMealDraft() {
+        if (this.currentPage !== 'add-meal' || !this.mealDraftPersistenceReady) return;
+        const activeSourceTab = document.querySelector('.meal-source-tab.active');
+        const draft = {
+            entryDate: document.getElementById('meal-entry-date')?.value,
+            consumptionTime: document.getElementById('meal-consumption-time')?.value,
+            mealType: this.currentMealType,
+            items: this.mealItems,
+            searchQuery: document.getElementById('food-search-input')?.value || '',
+            category: document.getElementById('meal-ingredient-category')?.value || '',
+            drinkQuery: document.getElementById('meal-drink-search')?.value || '',
+            recentQuery: this.mealRecentSearchQuery || '',
+            sourcePanel: activeSourceTab?.dataset.panel || 'lookup'
+        };
+        try {
+            localStorage.setItem(mealDraftStorageKey, JSON.stringify(draft));
+            this.mealDraftDirty = true;
+            this.mealDraftStorageErrorShown = false;
+        } catch (error) {
+            console.error('Meal draft save failed:', error);
+            if (!this.mealDraftStorageErrorShown) {
+                this.showToast(this.t('meal_draft_save_failed'), 'error');
+                this.mealDraftStorageErrorShown = true;
+            }
+        }
+    },
+
+    clearMealDraft() {
+        try {
+            localStorage.removeItem(mealDraftStorageKey);
+        } catch (error) {
+            console.error('Meal draft removal failed:', error);
+        }
+        this.mealDraftDirty = false;
+        this.mealDraftPersistenceReady = false;
+        this.mealRecentSearchQuery = '';
+    },
+
     async setupLogMeal() {
-        this.mealItems = [];
+        this.mealDraftPersistenceReady = false;
+        const storedMealDraft = this.currentPage === 'add-meal' ? this.loadMealDraft() : null;
+        this.mealItems = storedMealDraft?.items || [];
+        this.mealDraftDirty = Boolean(storedMealDraft);
         const searchInput = document.getElementById('food-search-input');
         const searchResults = document.getElementById('search-results');
         const categorySelect = document.getElementById('meal-ingredient-category');
@@ -323,7 +377,10 @@ Object.assign(App.prototype, {
                 drinkResults.innerHTML = `<p class="meal-source-empty">${this.t('error_loading')}</p>`;
             }
         };
-        drinkSearchInput?.addEventListener('input', renderDrinks);
+        drinkSearchInput?.addEventListener('input', () => {
+            renderDrinks();
+            this.persistMealDraft();
+        });
 
         const sourceTabs = document.querySelectorAll('.meal-source-tab');
         const selectSourceTab = selectedTab => {
@@ -339,6 +396,7 @@ Object.assign(App.prototype, {
                 drinkSearchInput?.focus();
                 loadDrinks();
             }
+            this.persistMealDraft();
         };
         sourceTabs.forEach(tab => {
             tab.addEventListener('click', () => selectSourceTab(tab));
@@ -353,15 +411,25 @@ Object.assign(App.prototype, {
             });
         });
 
-        const requestedMealDraft = this.pendingMealDraft;
+        const requestedMealDraft = storedMealDraft || this.pendingMealDraft;
         this.pendingMealDraft = null;
         this.currentMealType = requestedMealDraft?.mealType || this.getEstimatedMealType();
         const consumptionTimeInput = document.getElementById('meal-consumption-time');
         const requestedMealDate = this.pendingMealDate;
         this.pendingMealDate = null;
         mealDateInput.value = requestedMealDraft?.entryDate || requestedMealDate || this.getLocalDateValue();
-        mealDateInput.addEventListener('change', loadTodayMeals);
+        mealDateInput.addEventListener('change', () => {
+            loadTodayMeals();
+            this.persistMealDraft();
+        });
         if (consumptionTimeInput) consumptionTimeInput.value = requestedMealDraft?.consumptionTime || this.getCurrentTimeValue();
+        consumptionTimeInput?.addEventListener('change', () => this.persistMealDraft());
+        searchInput.value = requestedMealDraft?.searchQuery || '';
+        if (drinkSearchInput) drinkSearchInput.value = requestedMealDraft?.drinkQuery || '';
+        this.mealRecentSearchQuery = requestedMealDraft?.recentQuery || '';
+        const requestedSourceTab = Array.from(sourceTabs)
+            .find(tab => tab.dataset.panel === requestedMealDraft?.sourcePanel);
+        if (requestedSourceTab) selectSourceTab(requestedSourceTab);
         const mealTypeButtons = document.querySelectorAll('.meal-composer-details .meal-type-selector .meal-type');
         mealTypeButtons.forEach(btn => {
             const selected = btn.dataset.meal === this.currentMealType;
@@ -376,6 +444,7 @@ Object.assign(App.prototype, {
                 btn.setAttribute('aria-checked', 'true');
                 this.currentMealType = btn.dataset.meal;
                 updateMealItemsHeading();
+                this.persistMealDraft();
             });
         });
 
@@ -387,6 +456,7 @@ Object.assign(App.prototype, {
                 option.textContent = category;
                 categorySelect.appendChild(option);
             });
+            categorySelect.value = requestedMealDraft?.category || '';
         } catch (e) { /* category filtering remains optional when categories cannot be loaded */ }
 
         this.enhanceSelectWithSearch(categorySelect);
@@ -419,10 +489,12 @@ Object.assign(App.prototype, {
             searchRequestId++;
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(refreshSearchResults, 300);
+            this.persistMealDraft();
         });
         categorySelect?.addEventListener('change', () => {
             clearTimeout(searchTimeout);
             refreshSearchResults();
+            this.persistMealDraft();
         });
 
         document.getElementById('btn-cancel-add-meal')?.addEventListener('click', () => this.navigate('meals'));
@@ -447,6 +519,7 @@ Object.assign(App.prototype, {
                     }))
                 });
                 this.saveRecentFoods(this.mealItems);
+                this.clearMealDraft();
                 this.mealItems = [];
                 this.updateMealItemsList();
                 this.showToast(this.t('meal_saved'));
@@ -458,6 +531,8 @@ Object.assign(App.prototype, {
         });
 
         updateMealItemsHeading();
+        this.updateMealItemsList();
+        this.mealDraftPersistenceReady = true;
         this.renderRecentFoods();
         this.renderRecipeQuickAdd();
         refreshSearchResults();
@@ -519,7 +594,7 @@ Object.assign(App.prototype, {
             if (!container) return;
             container.className = 'recent-foods';
             let visibleCount = 25;
-            let query = '';
+            let query = this.mealRecentSearchQuery || '';
             const renderPage = () => {
                 const locale = window.i18n?.lang || 'en';
                 const normalizedQuery = query.toLocaleLowerCase(locale);
@@ -528,9 +603,11 @@ Object.assign(App.prototype, {
                     : recent;
                 const visible = filteredRecent.slice(0, visibleCount);
                 container.innerHTML = `<h3>${this.t('recent_foods')}</h3>
-                    <input type="search" class="recent-food-search" value="${escapeIngredientHtml(query)}"
-                           placeholder="${this.t('recent_foods_search_placeholder')}"
-                           aria-label="${this.t('recent_foods_search_placeholder')}">`
+                    <div class="food-search">
+                        <input type="search" class="recent-food-search" value="${escapeIngredientHtml(query)}"
+                               placeholder="${this.t('recent_foods_search_placeholder')}"
+                               aria-label="${this.t('recent_foods_search_placeholder')}">
+                    </div>`
                     + (visible.length ? visible.map((f, index) => `
                     <div class="search-result" data-recent-index="${index}">
                         <div class="food-name">${escapeIngredientHtml(f.name)}</div>
@@ -543,7 +620,9 @@ Object.assign(App.prototype, {
                 const filterInput = container.querySelector('.recent-food-search');
                 filterInput?.addEventListener('input', event => {
                     query = event.target.value.trim();
+                    this.mealRecentSearchQuery = query;
                     visibleCount = 25;
+                    this.persistMealDraft();
                     renderPage();
                     container.querySelector('.recent-food-search')?.focus();
                 });
@@ -709,5 +788,6 @@ Object.assign(App.prototype, {
         const totalCal = this.mealItems.reduce((sum, item) => sum + item.calories, 0);
         if (total) total.textContent = this.formatTotalCalories(totalCal);
         if (saveBtn) saveBtn.style.display = this.mealItems.length > 0 ? 'block' : 'none';
+        this.persistMealDraft();
     }
 });

@@ -3,6 +3,8 @@ class App {
         this.currentPage = 'dashboard';
         this.currentMealType = null;
         this.mealItems = [];
+        this.mealDraftDirty = false;
+        this.mealDraftPersistenceReady = false;
         this.charts = {};
         this.isReloading = false;
         this.pageRoutes = {
@@ -19,6 +21,7 @@ class App {
             preferences: '/preferences'
         };
         this.historyNavigationReady = false;
+        this.mealDraftWarningReady = false;
     }
 
     t(key, params = {}) {
@@ -204,6 +207,7 @@ class App {
         this.setupHamburgerNav();
         this.setupNavigation();
         this.setupHistoryNavigation();
+        this.setupMealDraftWarning();
         this.setupEscapeHandler();
         this.navigate(this.getPageFromPath(window.location.pathname), { history: 'replace' });
     }
@@ -312,12 +316,30 @@ class App {
         this.historyNavigationReady = true;
     }
 
+    setupMealDraftWarning() {
+        if (this.mealDraftWarningReady) return;
+        window.addEventListener('beforeunload', event => {
+            if (this.currentPage !== 'add-meal' || !this.mealDraftDirty) return;
+            event.preventDefault();
+            event.returnValue = '';
+        });
+        this.mealDraftWarningReady = true;
+    }
+
     dismissTransientOverlays() {
         document.querySelectorAll('.portion-dialog').forEach(overlay => overlay.remove());
     }
 
     navigate(page, options = {}) {
         if (!this.pageRoutes[page]) page = 'dashboard';
+
+        if (this.currentPage === 'add-meal' && page !== 'add-meal' && this.mealDraftDirty
+            && !window.confirm(this.t('confirm_unsaved_meal'))) {
+            if (options.history === 'none') {
+                window.history.pushState({ page: 'add-meal' }, '', this.pageRoutes['add-meal']);
+            }
+            return false;
+        }
 
         this.dismissTransientOverlays();
 
@@ -343,6 +365,7 @@ class App {
             this.applyTranslations(content);
             this.setupPage(page);
         }
+        return true;
     }
 
     async setupPage(page) {
