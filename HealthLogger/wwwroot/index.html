@@ -8,7 +8,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/css/styles.css?v=20261004105133" />
+    <link rel="stylesheet" href="/css/styles.css?v=00000000000000" />
     <meta name="theme-color" content="#2d7a4f" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -41,6 +41,7 @@
                 <ul class="nav-menu">
                     <li class="nav-item active" data-page="dashboard" data-i18n="nav_dashboard">🏠 Dashboard</li>
                     <li class="nav-item" data-page="log-meal" data-i18n="nav_log_meal">🍴 Today</li>
+                    <li class="nav-item" data-page="history" data-i18n="nav_history">📅 History</li>
                     <li class="nav-item" data-page="meals" data-i18n="nav_meals">🍽️ Meals</li>
                     <li class="nav-item" data-page="drinks" data-i18n="nav_drinks">🥤 Drinks</li>
                     <li class="nav-item" data-page="recipes" data-i18n="nav_recipes">🥪 Recipes</li>
@@ -101,6 +102,32 @@
                 <div id="today-meals"></div>
             </section>
             <div class="nutrient-drilldowns" id="nutrient-drilldowns"></div>
+        </div>
+    </template>
+
+    <template id="tmpl-history">
+        <div class="page history-page">
+            <h2 data-i18n="page_history">📅 History</h2>
+            <div class="history-controls">
+                <label for="history-date" data-i18n="meal_date">Date</label>
+                <input type="date" id="history-date" min="0001-01-01" max="9999-12-31" />
+                <label for="history-calendar-mode" data-i18n="history_calendar_view">Calendar view</label>
+                <select id="history-calendar-mode">
+                    <option value="week" data-i18n="history_week">Week</option>
+                    <option value="month" data-i18n="history_month">Month</option>
+                    <option value="year" data-i18n="history_year">Year</option>
+                </select>
+                <button type="button" class="btn btn-secondary" id="history-today-button" data-i18n="history_today">Today</button>
+            </div>
+            <section class="history-calendar-panel" aria-label="Calendar" data-i18n-aria-label="history_calendar">
+                <div class="history-calendar-nav">
+                    <button type="button" class="btn btn-secondary" data-history-direction="-1" data-i18n="history_previous">Previous</button>
+                    <button type="button" class="btn history-period-title" id="history-period-title" data-i18n-title="history_choose_month"></button>
+                    <button type="button" class="btn btn-secondary" data-history-direction="1" data-i18n="history_next">Next</button>
+                </div>
+                <div id="history-calendar" class="history-calendar-grid"></div>
+            </section>
+            <div id="history-today"></div>
         </div>
     </template>
 
@@ -555,24 +582,25 @@
     </template>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <script src="/js/api.js?v=20261004105133"></script>
-    <script src="/js/auth.js?v=20261004105133"></script>
-    <script src="/js/db.js?v=20261004105133"></script>
-    <script src="/js/i18n.js?v=20261004105133"></script>
-    <script src="/js/app.js?v=20261004105133"></script>
-    <script src="/js/shared/utils.js?v=20261004105133"></script>
-    <script src="/js/shared/favorites.js?v=20261004105133"></script>
+    <script src="/js/api.js?v=00000000000000"></script>
+    <script src="/js/auth.js?v=00000000000000"></script>
+    <script src="/js/db.js?v=00000000000000"></script>
+    <script src="/js/i18n.js?v=00000000000000"></script>
+    <script src="/js/app.js?v=00000000000000"></script>
+    <script src="/js/shared/utils.js?v=00000000000000"></script>
+    <script src="/js/shared/favorites.js?v=00000000000000"></script>
     <script src="/js/vendor/zxing-browser.min.js"></script>
-    <script src="/js/shared/barcode.js?v=20261004105133"></script>
-    <script src="/js/views/dashboard.js?v=20261004105133"></script>
-    <script src="/js/views/log-meal.js?v=20261004105133"></script>
-    <script src="/js/views/meals.js?v=20261004105133"></script>
-    <script src="/js/views/recipes.js?v=20261004105133"></script>
-    <script src="/js/views/drinks.js?v=20261004105133"></script>
-    <script src="/js/views/checkin.js?v=20261004105133"></script>
-    <script src="/js/views/metrics.js?v=20261004105133"></script>
-    <script src="/js/views/stats.js?v=20261004105133"></script>
-    <script src="/js/views/preferences.js?v=20261004105133"></script>
-    <script src="/js/views/ingredients.js?v=20261004105133"></script>
+    <script src="/js/shared/barcode.js?v=00000000000000"></script>
+    <script src="/js/views/dashboard.js?v=00000000000000"></script>
+    <script src="/js/views/log-meal.js?v=00000000000000"></script>
+    <script src="/js/views/history.js?v=00000000000000"></script>
+    <script src="/js/views/meals.js?v=00000000000000"></script>
+    <script src="/js/views/recipes.js?v=00000000000000"></script>
+    <script src="/js/views/drinks.js?v=00000000000000"></script>
+    <script src="/js/views/checkin.js?v=00000000000000"></script>
+    <script src="/js/views/metrics.js?v=00000000000000"></script>
+    <script src="/js/views/stats.js?v=00000000000000"></script>
+    <script src="/js/views/preferences.js?v=00000000000000"></script>
+    <script src="/js/views/ingredients.js?v=00000000000000"></script>
 </body>
 </html>

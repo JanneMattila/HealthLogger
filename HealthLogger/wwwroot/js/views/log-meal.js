@@ -1,5 +1,6 @@
 // Log Meal view
 const mealDraftStorageKey = 'HealthLogger_addMealDraft';
+let mealConfirmationSequence = 0;
 
 Object.assign(App.prototype, {
     loadMealDraft() {
@@ -51,7 +52,7 @@ Object.assign(App.prototype, {
         this.mealRecentSearchQuery = '';
     },
 
-    async setupLogMeal() {
+    async setupLogMeal(options = {}) {
         this.mealDraftPersistenceReady = false;
         const storedMealDraft = this.currentPage === 'add-meal' ? this.loadMealDraft() : null;
         this.mealItems = storedMealDraft?.items || [];
@@ -61,8 +62,13 @@ Object.assign(App.prototype, {
         const categorySelect = document.getElementById('meal-ingredient-category');
         const drinkSearchInput = document.getElementById('meal-drink-search');
         const drinkResults = document.getElementById('meal-drink-results');
-        const mealDateInput = document.getElementById('meal-entry-date');
+        const mealDateInput = options.dateInput || document.getElementById('meal-entry-date');
         let searchTimeout;
+        let favoriteFoodsPromise;
+        const loadFavoriteFoods = () => {
+            favoriteFoodsPromise ??= this.loadFavoriteFoods();
+            return favoriteFoodsPromise;
+        };
         const mealTypes = this.getMealTypes();
 
         const itemCalories = item => item.customCalories ??
@@ -262,16 +268,37 @@ Object.assign(App.prototype, {
             });
         };
 
+        const todayMealsContainer = document.getElementById('today-meals');
+        let todayRequestId = 0;
         const loadTodayMeals = async () => {
+            const requestId = ++todayRequestId;
             try {
-                renderTodayMeals(await API.getEntries(mealDateInput?.value || this.getLocalDateValue()));
+                const entries = await API.getEntries(mealDateInput?.value || this.getLocalDateValue());
+                if (requestId !== todayRequestId || !todayMealsContainer?.isConnected) return;
+                renderTodayMeals(entries);
             } catch (error) {
                 console.error('Meals load failed:', error);
+                if (requestId !== todayRequestId || !todayMealsContainer?.isConnected) return;
+                const meals = document.getElementById('today-meals');
+                if (meals) {
+                    document.getElementById('meal-today-stats').innerHTML = '';
+                    document.getElementById('nutrient-drilldowns').innerHTML = '';
+                    meals.innerHTML = `<p class="empty" role="alert">${this.t('error_loading')}</p>`;
+                }
             }
         };
 
         if (!searchInput) {
-            document.getElementById('btn-add-meal-from-today')?.addEventListener('click', () => this.navigate('add-meal'));
+            mealDateInput?.addEventListener('change', () => {
+                document.getElementById('meal-today-stats').innerHTML = '';
+                document.getElementById('nutrient-drilldowns').innerHTML = '';
+                document.getElementById('today-meals').innerHTML = `<p role="status">${this.t('loading')}</p>`;
+                loadTodayMeals();
+            });
+            document.getElementById('btn-add-meal-from-today')?.addEventListener('click', () => {
+                if (mealDateInput) this.pendingMealDate = mealDateInput.value;
+                this.navigate('add-meal');
+            });
             await loadTodayMeals();
             return;
         }
@@ -283,11 +310,13 @@ Object.assign(App.prototype, {
 
         const renderSearchResults = (results, container = searchResults) => {
             const sortedResults = this.sortFavoritesFirst(results);
+            const favoriteIds = new Set(this.getFavorites().map(favorite => favorite.id));
+            const foodsById = new Map(sortedResults.map(food => [food.id, food]));
             let previousFavorite;
             container.innerHTML = sortedResults.map(f => {
                 const primaryName = this.getLocalizedName(f);
                 const secondaryName = this.getSecondaryName(f);
-                const isFavorite = this.isFavorite(f.id);
+                const isFavorite = favoriteIds.has(f.id);
                 const sectionTitle = container === searchResults && isFavorite !== previousFavorite
                     && (isFavorite || previousFavorite === true)
                     ? `<h3 class="ingredients-section-title">${this.t(isFavorite ? 'favorites_title' : 'other_products')}</h3>`
@@ -314,9 +343,14 @@ Object.assign(App.prototype, {
             }).join('');
 
             container.querySelectorAll('.search-result').forEach(el => {
-                const food = sortedResults.find(item => item.id === el.dataset.id);
+                const food = foodsById.get(el.dataset.id);
                 const showIngredient = async () => {
                     if (!food) return;
+                    const cachedFood = _ingredientsCache.allItems?.find(item => item.id === food.id);
+                    if (cachedFood) {
+                        this.showMealIngredientDialog(cachedFood);
+                        return;
+                    }
                     try {
                         this.showMealIngredientDialog(await API.getFood(food.id));
                     } catch {
@@ -337,7 +371,7 @@ Object.assign(App.prototype, {
             container.querySelectorAll('.search-favorite').forEach(button => {
                 button.addEventListener('click', (event) => {
                     event.stopPropagation();
-                    const food = sortedResults.find(item => item.id === button.dataset.favoriteId);
+                    const food = foodsById.get(button.dataset.favoriteId);
                     if (!food) return;
                     this.toggleFavorite({
                         id: food.id,
@@ -348,6 +382,7 @@ Object.assign(App.prototype, {
                         fat: food.fat,
                         carbs: food.carbohydrate
                     });
+                    favoriteFoodsPromise = null;
                     renderSearchResults(results, container);
                 });
                 button.addEventListener('keydown', event => event.stopPropagation());
@@ -449,7 +484,8 @@ Object.assign(App.prototype, {
         });
 
         try {
-            const categories = await API.getFoodCategories();
+            const categories = _ingredientsCache.categories || await API.getFoodCategories();
+            _ingredientsCache.categories = categories;
             categories.forEach(category => {
                 const option = document.createElement('option');
                 option.value = category;
@@ -467,11 +503,13 @@ Object.assign(App.prototype, {
             const requestId = ++searchRequestId;
 
             try {
-                const [results, favorites] = await Promise.all([query.length >= 2
-                    ? this.searchFoods(query)
-                    : category ? API.browseFoods(category, window.i18n?.lang || 'en', 100, 0) : [],
-                    this.loadFavoriteFoods()]);
-                if (requestId !== searchRequestId) return;
+                const [foods, favorites] = await Promise.all([query.length >= 2 || category
+                    ? this.loadIngredientFoods() : [],
+                    loadFavoriteFoods()]);
+                if (requestId !== searchRequestId || !searchInput.isConnected) return;
+                const results = query.length >= 2 || category
+                    ? this.filterIngredientFoods(foods, query.length >= 2 ? query : '', category)
+                    : [];
                 const normalizedQuery = query.toLowerCase();
                 const matchingFavorites = favorites.filter(food => (!category || food.category === category)
                     && (query.length < 2 || [food.nameFi, food.nameEn]
@@ -481,6 +519,9 @@ Object.assign(App.prototype, {
                     && (!category || food.category === category))]);
             } catch (e) {
                 console.error('Search failed:', e);
+                if (requestId === searchRequestId && searchResults.isConnected) {
+                    searchResults.innerHTML = `<p class="empty" role="alert">${this.t('error_loading')}</p>`;
+                }
             }
         };
 
@@ -503,31 +544,12 @@ Object.assign(App.prototype, {
             this.showBarcodeDialog(food => this.showMealIngredientDialog(food));
         });
 
-        document.getElementById('btn-save-meal')?.addEventListener('click', async () => {
-            if (this.mealItems.length === 0) return;
-            try {
-                await API.createMeal({
-                    entryDate: mealDateInput.value,
-                    mealType: this.currentMealType,
-                    consumptionTime: this.toApiConsumptionTime(consumptionTimeInput?.value || this.getCurrentTimeValue()),
-                    notes: null,
-                    items: this.mealItems.map(item => ({
-                        foodItemId: item.id || undefined,
-                        portionGrams: item.portion,
-                        customCalories: item.customCalories ?? undefined,
-                        notes: item.id ? null : item.name
-                    }))
-                });
-                this.saveRecentFoods(this.mealItems);
-                this.clearMealDraft();
-                this.mealItems = [];
-                this.updateMealItemsList();
-                this.showToast(this.t('meal_saved'));
-                this.pendingMealDate = mealDateInput.value;
-                this.navigate('meals');
-            } catch (e) {
-                alert(`${this.t('toast_save_failed')}: ${e.message}`);
-            }
+        document.getElementById('btn-save-meal')?.addEventListener('click', event => {
+            this.showMealSaveConfirmation({
+                entryDate: mealDateInput.value,
+                mealType: this.currentMealType,
+                consumptionTime: consumptionTimeInput?.value || this.getCurrentTimeValue()
+            }, event.currentTarget);
         });
 
         updateMealItemsHeading();
@@ -540,6 +562,91 @@ Object.assign(App.prototype, {
 
     async setupAddMeal() {
         await this.setupLogMeal();
+    },
+
+    showMealSaveConfirmation(mealContext, returnFocus) {
+        if (!this.mealItems.length || document.querySelector('.meal-save-confirmation')) return;
+        const items = this.mealItems.map(item => ({ ...item }));
+        if (items.some(item => !Number.isFinite(Number(item.portion)) || Number(item.portion) <= 0)) {
+            this.showToast(this.t('ingredient_amount_invalid'), 'error');
+            return;
+        }
+        const totals = items.reduce((total, item) => {
+            total.grams += Number(item.portion);
+            total.calories += Number(item.calories) || 0;
+            for (const nutrient of ['protein', 'fat', 'carbs']) {
+                total[nutrient] += (Number(item[nutrient]) || 0) * Number(item.portion) / 100;
+            }
+            return total;
+        }, { grams: 0, calories: 0, protein: 0, fat: 0, carbs: 0 });
+        const formatGrams = value => `${parseFloat(value.toFixed(1))} g`;
+        const titleId = `meal-save-confirmation-${++mealConfirmationSequence}-title`;
+        const confirmation = document.createElement('div');
+        confirmation.className = 'portion-dialog ingredient-confirmation meal-save-confirmation';
+        confirmation.innerHTML = `
+            <div class="portion-content ingredient-confirmation-content" role="dialog" aria-modal="true" aria-labelledby="${titleId}">
+                <h3 id="${titleId}">${this.t('confirm_meal_save')}</h3>
+                <div class="ingredient-confirmation-summary">
+                    <strong>${escapeIngredientHtml(this.t(`meal_${mealContext.mealType}`))}</strong>
+                    <span>${escapeIngredientHtml(mealContext.entryDate)} · ${escapeIngredientHtml(mealContext.consumptionTime)} · ${formatGrams(totals.grams)}</span>
+                    ${items.map(item => `<span>${escapeIngredientHtml(item.name)} · ${formatGrams(Number(item.portion))}</span>`).join('')}
+                </div>
+                <table class="nutrient-table">
+                    <tr><td>${this.t('energy')}</td><td class="nutrient-value" data-meal-nutrient="energy">${Math.round(totals.calories)} kcal</td></tr>
+                    <tr><td>${this.t('protein_short')}</td><td class="nutrient-value" data-meal-nutrient="protein">${formatGrams(totals.protein)}</td></tr>
+                    <tr><td>${this.t('fat_short')}</td><td class="nutrient-value" data-meal-nutrient="fat">${formatGrams(totals.fat)}</td></tr>
+                    <tr><td>${this.t('carbs_short')}</td><td class="nutrient-value" data-meal-nutrient="carbs">${formatGrams(totals.carbs)}</td></tr>
+                </table>
+                <div class="portion-buttons">
+                    <button type="button" class="btn btn-secondary meal-confirm-cancel">${this.t('btn_cancel')}</button>
+                    <button type="button" class="btn btn-primary meal-confirm-save">${this.t('btn_save_meal')}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(confirmation);
+        let saving = false;
+        const closeConfirmation = (restoreFocus = true) => {
+            if (saving) return;
+            confirmation.remove();
+            if (restoreFocus) restoreIngredientFocus(returnFocus);
+        };
+        this.dismissOverlayOnClickOutside(confirmation, closeConfirmation);
+        const cancelButton = confirmation.querySelector('.meal-confirm-cancel');
+        cancelButton.addEventListener('click', () => closeConfirmation());
+        confirmation.querySelector('.meal-confirm-save').addEventListener('click', async () => {
+            if (saving) return;
+            saving = true;
+            const buttons = confirmation.querySelectorAll('button');
+            buttons.forEach(button => { button.disabled = true; });
+            try {
+                await API.createMeal({
+                    ...mealContext,
+                    consumptionTime: this.toApiConsumptionTime(mealContext.consumptionTime),
+                    notes: null,
+                    items: items.map(item => ({
+                        foodItemId: item.id || undefined,
+                        portionGrams: Number(item.portion),
+                        customCalories: item.customCalories ?? undefined,
+                        notes: item.id ? null : item.name
+                    }))
+                });
+            } catch (error) {
+                console.error('Meal save failed:', error);
+                saving = false;
+                buttons.forEach(button => { button.disabled = false; });
+                this.showToast(this.t('toast_save_failed'), 'error');
+                return;
+            }
+            saving = false;
+            closeConfirmation(false);
+            this.saveRecentFoods(items);
+            this.clearMealDraft();
+            this.mealItems = [];
+            this.updateMealItemsList();
+            this.showToast(this.t('meal_saved'));
+            this.pendingMealDate = mealContext.entryDate;
+            this.navigate('meals');
+        });
+        cancelButton.focus();
     },
 
     showMealIngredientDialog(food) {
@@ -696,7 +803,10 @@ Object.assign(App.prototype, {
                     const recipe = recipes.find(item => item.id === el.dataset.recipeId);
                     if (recipe) this.showRecipePortionSelector(recipe, this.currentMealType,
                         document.getElementById('meal-consumption-time')?.value,
-                        document.getElementById('meal-entry-date')?.value);
+                        document.getElementById('meal-entry-date')?.value, {
+                            onAdded: () => this.persistMealDraft(),
+                            returnFocus: el
+                        });
                 };
                 el.addEventListener('click', selectRecipe);
                 el.setAttribute('role', 'button');

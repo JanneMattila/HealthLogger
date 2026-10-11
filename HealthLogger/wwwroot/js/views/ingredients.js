@@ -3,8 +3,9 @@ const _ingredientsCache = {
     categories: null,
     browse: {},   // keyed by `${category}|${lang}`
     allItems: null, // all items loaded for client-side search
+    allItemsPromise: null,
     ttl: 5 * 60 * 1000, // 5 minutes
-    clear() { this.categories = null; this.browse = {}; this.allItems = null; }
+    clear() { this.categories = null; this.browse = {}; this.allItems = null; this.allItemsPromise = null; }
 };
 
 const escapeIngredientHtml = value => String(value ?? '')
@@ -78,6 +79,29 @@ const updateIngredientReferences = (food, lang) => {
 };
 
 Object.assign(App.prototype, {
+    async loadIngredientFoods() {
+        if (_ingredientsCache.allItems) return _ingredientsCache.allItems;
+        if (!_ingredientsCache.allItemsPromise) {
+            const request = API.browseFoods(null, window.i18n?.lang || 'en', 10000, 0);
+            _ingredientsCache.allItemsPromise = request;
+            try {
+                const items = await request;
+                if (_ingredientsCache.allItemsPromise === request) _ingredientsCache.allItems = items;
+                return items;
+            } finally {
+                if (_ingredientsCache.allItemsPromise === request) _ingredientsCache.allItemsPromise = null;
+            }
+        }
+        return _ingredientsCache.allItemsPromise;
+    },
+
+    filterIngredientFoods(items, query, category = '') {
+        const normalizedQuery = query.toLowerCase();
+        return items.filter(food => (!category || food.category === category)
+            && [food.nameFi, food.nameEn].some(name => (name || '').toLowerCase().includes(normalizedQuery)))
+            .slice(0, 100);
+    },
+
     async setupIngredients() {
         const listEl = document.getElementById('ingredients-list');
         const searchInput = document.getElementById('ingredients-search');
@@ -220,21 +244,16 @@ Object.assign(App.prototype, {
         const ensureAllItems = async () => {
             if (_ingredientsCache.allItems) return _ingredientsCache.allItems;
             try {
-                const items = await API.browseFoods(null, lang, 10000, 0);
-                _ingredientsCache.allItems = items;
-                return items;
+                return await this.loadIngredientFoods();
             } catch (e) {
+                console.error('Ingredient search load failed:', e);
+                listEl.innerHTML = `<p class="empty" role="alert">${this.t('error_loading')}</p>`;
                 return null;
             }
         };
 
         const searchLocal = (query, items) => {
-            const q = query.toLowerCase();
-            return items.filter(f => {
-                const nameFi = (f.nameFi || '').toLowerCase();
-                const nameEn = (f.nameEn || '').toLowerCase();
-                return nameFi.includes(q) || nameEn.includes(q);
-            }).slice(0, 100);
+            return this.filterIngredientFoods(items, query);
         };
 
         searchInput?.addEventListener('input', () => {
@@ -500,11 +519,13 @@ Object.assign(App.prototype, {
                 kcalPer100: Number(food.energyKcal) || 0,
                 protein: Number(food.protein) || 0,
                 fat: Number(food.fat) || 0,
-                carbs: Number(food.carbohydrate) || 0
+                carbs: Number(food.carbohydrate) || 0,
+                ...(drink ? { food } : {})
             });
             const nowFavorite = this.isFavorite(food.id);
             favoriteButton.textContent = nowFavorite ? '★' : '☆';
             favoriteButton.classList.toggle('active', nowFavorite);
+            if (drink && this.currentPage === 'drinks') this.renderDrinkFavorites();
         });
 
         overlay.querySelector('.ingredient-close-btn').addEventListener('click', closeDetail);

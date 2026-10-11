@@ -553,7 +553,7 @@ Object.assign(App.prototype, {
         };
     },
 
-    showRecipePortionSelector(recipe, mealType = null, consumptionTime = null, mealDate = null) {
+    showRecipePortionSelector(recipe, mealType = null, consumptionTime = null, mealDate = null, options = {}) {
         const mealTypes = this.getMealTypes().map(value => ({ value, label: this.t(`meal_${value}`) }));
         let selectedMealType = mealTypes.some(item => item.value === mealType)
             ? mealType
@@ -653,8 +653,8 @@ Object.assign(App.prototype, {
                     </table>
                 </div>
                 <div class="portion-buttons">
-                    <button class="btn btn-secondary" id="btn-rp-cancel">${this.t('btn_cancel')}</button>
-                    <button class="btn btn-primary" id="btn-rp-add">${this.t('btn_add')}</button>
+                    <button type="button" class="btn btn-secondary" id="btn-rp-cancel">${this.t('btn_cancel')}</button>
+                    <button type="button" class="btn btn-primary" id="btn-rp-add">${this.t('btn_add')}</button>
                 </div>
             </div>`;
 
@@ -717,13 +717,16 @@ Object.assign(App.prototype, {
         updateSummary();
 
         overlay.querySelector('#btn-rp-cancel').onclick = () => overlay.remove();
+        let confirmationOpen = false;
         overlay.querySelector('#btn-rp-add').onclick = event => {
+            if (confirmationOpen) return;
             const value = mode === 'quantity'
                 ? parseFloat(quantityInput.value)
                 : mode === 'percent'
                     ? parseFloat(percentInput.value)
                     : parseFloat(gramsInput.value);
             if (!Number.isFinite(value) || value <= 0) return;
+            confirmationOpen = true;
             const multiplier = selectedMultiplier();
             const grams = baseWeight * multiplier;
             const calories = baseCalories * multiplier;
@@ -757,13 +760,17 @@ Object.assign(App.prototype, {
                 </div>`;
             document.body.appendChild(confirmation);
             const closeConfirmation = (restoreFocus = true) => {
+                confirmationOpen = false;
                 confirmation.remove();
                 if (restoreFocus && confirmationReturnFocus.isConnected) confirmationReturnFocus.focus();
             };
             this.dismissOverlayOnClickOutside(confirmation, closeConfirmation);
             const confirmationCancel = confirmation.querySelector('.recipe-confirm-cancel');
             confirmationCancel.addEventListener('click', closeConfirmation);
+            let saving = false;
             confirmation.querySelector('.recipe-confirm-add').addEventListener('click', async () => {
+                if (saving) return;
+                saving = true;
                 const confirmationButtons = confirmation.querySelectorAll('button');
                 confirmationButtons.forEach(button => { button.disabled = true; });
                 try {
@@ -776,13 +783,19 @@ Object.assign(App.prototype, {
                     this.showToast(this.t('recipe_added'));
                 } catch (e) {
                     console.error('Recipe consumption add failed:', e);
+                    saving = false;
                     confirmationButtons.forEach(button => { button.disabled = false; });
                     this.showToast(this.t('add_failed'), 'error');
                     return;
                 }
                 closeConfirmation(false);
                 overlay.remove();
-                this.navigate('dashboard');
+                if (options.onAdded) {
+                    options.onAdded();
+                    if (options.returnFocus?.isConnected) options.returnFocus.focus();
+                } else {
+                    this.navigate('dashboard');
+                }
             });
             confirmationCancel.focus();
         };

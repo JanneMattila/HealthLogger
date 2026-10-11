@@ -54,7 +54,8 @@ Object.assign(App.prototype, {
                 kcalPer100: item.kcalPer100 || 0,
                 protein: item.protein || 0,
                 fat: item.fat || 0,
-                carbs: item.carbs || 0
+                carbs: item.carbs || 0,
+                ...(item.type === 'drink' && item.food ? { food: item.food } : {})
             });
         }
         this.saveFavorites(favs);

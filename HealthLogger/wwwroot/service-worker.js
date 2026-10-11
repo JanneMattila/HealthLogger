@@ -1,4 +1,4 @@
-const CACHE_VERSION = '20261004105133';
+const CACHE_VERSION = '00000000000000';
 const CACHE_NAME = `HealthLogger-v${CACHE_VERSION}`;
 const STATIC_ASSETS = [
     '/',
@@ -15,6 +15,7 @@ const STATIC_ASSETS = [
     `/js/shared/barcode.js?v=${CACHE_VERSION}`,
     `/js/views/dashboard.js?v=${CACHE_VERSION}`,
     `/js/views/log-meal.js?v=${CACHE_VERSION}`,
+    `/js/views/history.js?v=${CACHE_VERSION}`,
     `/js/views/meals.js?v=${CACHE_VERSION}`,
     `/js/views/recipes.js?v=${CACHE_VERSION}`,
     `/js/views/drinks.js?v=${CACHE_VERSION}`,

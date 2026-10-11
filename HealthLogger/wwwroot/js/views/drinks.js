@@ -107,6 +107,34 @@ Object.assign(App.prototype, {
         });
     },
 
+    async showFavoriteDrinkDialog(favorite, returnFocus) {
+        let food;
+        if (favorite.id.startsWith('drink_')) {
+            food = favorite.food || {
+                id: favorite.id,
+                nameEn: favorite.name,
+                nameFi: favorite.name,
+                energyKcal: favorite.kcalPer100,
+                protein: favorite.protein,
+                fat: favorite.fat,
+                carbohydrate: favorite.carbs
+            };
+        } else {
+            try {
+                food = await API.getFood(favorite.id);
+            } catch (e) {
+                console.error('Favorite drink load failed:', e);
+                this.showToast(this.t('error_loading'), 'error');
+                return;
+            }
+        }
+        if (this.getBuiltInDrinkFineliIds().includes(food.fineliId)) {
+            this.showDrinkConsumptionDialog(food, { returnFocus });
+        } else {
+            this.showLocalDrinkConsumptionDialog(food, returnFocus);
+        }
+    },
+
     async showQuickDrinkDialog(icon, fineliId, options = {}) {
         const returnFocus = getIngredientFocusTarget();
         let food;
@@ -391,26 +419,9 @@ Object.assign(App.prototype, {
 
         updateFavBtn();
 
-        favBtn.onclick = () => {
-            const drinkName = nameInput.value.trim();
-            if (!drinkName || !hasNutrition) return;
-            const favId = 'drink_' + drinkName.toLowerCase();
-            this.toggleFavorite({
-                id: favId,
-                name: drinkName,
-                type: 'drink',
-                kcalPer100: parseFloat(overlay.querySelector('#drink-kcal')?.value) || 0,
-                protein: parseFloat(overlay.querySelector('#drink-protein')?.value) || 0,
-                fat: parseFloat(overlay.querySelector('#drink-fat')?.value) || 0,
-                carbs: parseFloat(overlay.querySelector('#drink-carbs')?.value) || 0
-            });
-            updateFavBtn();
-        };
-
-        overlay.querySelector('#btn-drink-cancel').onclick = () => overlay.remove();
-        overlay.querySelector('#btn-drink-add').onclick = () => {
+        const getEnteredDrinkFood = () => {
             const name = nameInput.value.trim() || this.t('drink_default');
-            const food = {
+            return {
                 id: 'drink_' + name.toLowerCase(),
                 nameEn: name,
                 nameFi: name,
@@ -422,6 +433,29 @@ Object.assign(App.prototype, {
                 protein: parseFloat(overlay.querySelector('#drink-protein').value) || 0,
                 salt: parseFloat(overlay.querySelector('#drink-salt').value) || 0
             };
+        };
+
+        favBtn.onclick = () => {
+            const drinkName = nameInput.value.trim();
+            if (!drinkName || !hasNutrition) return;
+            const food = getEnteredDrinkFood();
+            this.toggleFavorite({
+                id: food.id,
+                name: drinkName,
+                type: 'drink',
+                kcalPer100: food.energyKcal,
+                protein: food.protein,
+                fat: food.fat,
+                carbs: food.carbohydrate,
+                food
+            });
+            updateFavBtn();
+            this.renderDrinkFavorites();
+        };
+
+        overlay.querySelector('#btn-drink-cancel').onclick = () => overlay.remove();
+        overlay.querySelector('#btn-drink-add').onclick = () => {
+            const food = getEnteredDrinkFood();
             clearTimeout(nutritionSearchTimeout);
             overlay.remove();
             this.showLocalDrinkConsumptionDialog(food, returnFocus);
@@ -489,13 +523,14 @@ Object.assign(App.prototype, {
         }
         container.innerHTML = `<h3>${this.t('favorites_title')}</h3>
             <div class="drink-favorites-list">${favs.map(f => `
-                <button class="btn btn-secondary drink-quick-btn drink-fav-btn" data-name="${f.name}">
-                    ⭐ ${f.name}
+                <button class="btn btn-secondary drink-quick-btn drink-fav-btn" data-id="${escapeIngredientHtml(f.id)}">
+                    ⭐ ${escapeIngredientHtml(f.name)}
                 </button>
             `).join('')}</div>`;
         container.querySelectorAll('.drink-fav-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                this.showDrinkDialog(btn.dataset.name);
+                const favorite = favs.find(f => f.id === btn.dataset.id);
+                this.showFavoriteDrinkDialog(favorite, btn);
             });
         });
     },

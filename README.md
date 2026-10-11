@@ -4,8 +4,11 @@ A comprehensive calorie intake and wellness tracking application built with ASP.
 
 ## Features
 
-- **Drink logging:** Drinks use the ingredient consumption dialog with nutrition above the amount controls, volume units and drink presets. The dialog fills mobile screens and stays centered on desktop. Custom drinks are selected or entered before choosing the amount and confirming consumption.
+- **Drink logging:** Drinks use the ingredient consumption dialog with nutrition above the amount controls, volume units and drink presets. The dialog fills mobile screens and stays centered on desktop. Custom drinks are selected or entered before choosing the amount and confirming consumption. Saved drink favorites open directly with their nutrition: database drinks load their current food record, and manually entered drinks retain their nutrition locally. Older manual favorites restore the energy and macros previously saved; nutrient values not saved by older versions remain unavailable.
 - **Meal Logging** — Search Finnish foods (Fineli database), log meals with portions
+- **History:** Browse any date using a week, month or year calendar, or enter a date directly. History reuses Today's nutrition totals, meal groups and nutrient breakdowns for the selected day. Dates are shareable via `/history?date=YYYY-MM-DD`; adding a meal from History carries the selected date into the meal editor. The calendar navigation is inspired by [GymLogger](https://github.com/JanneMattila/GymLogger).
+- **Meal save confirmation:** Save meal displays the selected date, time, ingredients, total weight, calories, protein, fat and carbohydrates before recording the meal. Cancel returns to the unchanged draft; failed saves remain available for retry.
+- **Meal ingredient search:** Meals and Ingredients share a locally cached food list, so subsequent searches avoid server requests. Adding a recipe from the meal editor saves that recipe with the selected meal date, time and type without leaving the editor or discarding its ingredient draft. Recipes added from other views retain their existing Dashboard navigation.
 - 📸 **AI Food Recognition** — Take a photo, Azure OpenAI identifies ingredients
 - 🛏️ **Daily Wellness Check-ins** — Sleep, mood, energy, stress, water, exercise, alcohol, steps
 - ⚖️ **Body Metrics** — Weight, waist circumference (vatsanympärysmitta), blood pressure

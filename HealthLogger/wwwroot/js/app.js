@@ -10,6 +10,7 @@ class App {
         this.pageRoutes = {
             dashboard: '/',
             'log-meal': '/today',
+            history: '/history',
             'add-meal': '/meals/new',
             meals: '/meals',
             drinks: '/drinks',
@@ -344,7 +345,9 @@ class App {
         this.dismissTransientOverlays();
 
         const historyMode = options.history || 'push';
-        const route = this.pageRoutes[page];
+        const route = page === 'history' && window.location.pathname === '/history'
+            ? window.location.pathname + window.location.search
+            : this.pageRoutes[page];
         if (historyMode === 'replace') {
             window.history.replaceState({ page }, '', route);
         } else if (historyMode === 'push' && window.location.pathname !== route) {
@@ -372,6 +375,7 @@ class App {
         switch (page) {
             case 'dashboard': await this.setupDashboard(); break;
             case 'log-meal': await this.setupLogMeal(); break;
+            case 'history': await this.setupHistory(); break;
             case 'add-meal': await this.setupAddMeal(); break;
             case 'meals': await this.setupMeals(); break;
             case 'drinks': await this.setupDrinks(); break;

@@ -424,6 +424,26 @@ h3 { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
 }
 
 /* Meal items */
+.history-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 1rem 0; }
+.history-controls input, .history-controls select { padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); min-width: 0; }
+.history-calendar-panel { padding: 1rem; margin-bottom: 1.5rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.history-calendar-nav { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+.history-period-title { color: var(--text); white-space: normal; padding-inline: 0.25rem; }
+.history-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.35rem; }
+.history-weekday { text-align: center; font-size: 0.8rem; color: var(--text-secondary); padding: 0.3rem 0; }
+.history-day { min-height: 2.75rem; padding: 0.5rem 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }
+.history-day.today { border: 2px solid var(--primary); }
+.history-day.selected { background: var(--primary); color: white; }
+.history-day:focus-visible, .history-month:focus-visible { outline: 3px solid var(--primary-light); outline-offset: 2px; }
+.history-year-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.history-month { white-space: normal; padding-inline: 0.25rem; }
+@media (max-width: 480px) {
+    .history-calendar-panel { padding: 0.5rem; }
+    .history-calendar-nav .btn { padding: 0.5rem 0.35rem; font-size: 0.8rem; }
+    .history-year-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .history-page .page-title-row { flex-wrap: wrap; }
+}
+
 .meal-items { margin-bottom: 1rem; }
 .today-meal-overview { margin-bottom: 1.5rem; }
 .today-meal-overview > h3, .meal-add-heading { margin: 0.75rem 0; font-size: 1rem; }
