@@ -428,7 +428,10 @@ h3 { margin: 1rem 0 0.5rem; font-size: 1.1rem; }
 .history-controls input, .history-controls select { padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); color: var(--text); min-width: 0; }
 .history-calendar-panel { padding: 1rem; margin-bottom: 1.5rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
 .history-calendar-nav { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
-.history-period-title { color: var(--text); white-space: normal; padding-inline: 0.25rem; }
+.history-period-title { background: transparent; color: var(--text); white-space: normal; padding-inline: 0.25rem; }
+.history-period-title:hover:not(:disabled) { background: var(--border); }
+.history-period-title:disabled { cursor: default; }
+.history-period-title:focus-visible { outline: 3px solid var(--primary-light); outline-offset: 2px; }
 .history-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.35rem; }
 .history-weekday { text-align: center; font-size: 0.8rem; color: var(--text-secondary); padding: 0.3rem 0; }
 .history-day { min-height: 2.75rem; padding: 0.5rem 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; cursor: pointer; }

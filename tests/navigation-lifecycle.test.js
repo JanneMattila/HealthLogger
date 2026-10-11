@@ -1,4 +1,4 @@
-const { chromium } = require('playwright');
+const { chromium } = require('./test-support');
 const fs = require('fs');
 const path = require('path');
 
@@ -159,6 +159,12 @@ async function assertDialogSemantics(page, dialogSelector, expectedFocusSelector
         assert(await page.locator('.portion-dialog').count() === 0, 'save closes drink and confirmation dialogs');
 
         await page.locator('#btn-save-meal').click();
+        await assertDialogSemantics(page, '.meal-save-confirmation [role="dialog"]', '.meal-confirm-cancel');
+        assert(await page.evaluate(() => app.currentPage) === 'add-meal', 'meal save first displays nutrition confirmation');
+        await page.locator('.meal-confirm-cancel').click();
+        assert(await page.locator('.meal-item').count() === 2, 'cancelling meal confirmation preserves the draft');
+        await page.locator('#btn-save-meal').click();
+        await page.locator('.meal-confirm-save').click();
         await page.locator('#content .meals-page').waitFor({ state: 'visible' });
         await page.locator('.meal-card-header').waitFor({ state: 'visible' });
         assert(await page.evaluate(() => window.app.currentPage) === 'meals', 'saving the meal leaves Add Meal');

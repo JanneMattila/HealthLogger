@@ -1,4 +1,4 @@
-const { chromium } = require('playwright');
+const { chromium } = require('./test-support');
 const fs = require('fs');
 const path = require('path');
 
@@ -174,11 +174,16 @@ async function testMealFavoritesAndRecipes(browser) {
         await page.locator('.recipe-use-dialog').waitFor();
         await page.locator('#recipe-portion-quantity').fill('2');
         await page.locator('#btn-rp-add').click();
+        assert(await page.evaluate(() => window.__addedRecipe === undefined),
+            'recipe is not saved before confirmation');
+        await page.locator('.recipe-confirm-add').click();
         await page.waitForFunction(() => !!window.__addedRecipe);
         const added = await page.evaluate(() => window.__addedRecipe);
         assert(added.id === 'recipe' && added.entryDate === '2026-09-10' && added.mealType === 'lunch'
             && added.consumptionTime === '12:34:00' && added.portionMultiplier === 2,
         'recipe selection submits the chosen portion with the Add Meal date, time and meal type');
+        assert(await page.evaluate(() => app.currentPage) === 'add-meal',
+            'recipe confirmation keeps the meal editor open');
 
         await page.evaluate(() => { API.getRecipes = async () => []; });
         await navigate(page, 'add-meal', '.add-meal-page');
@@ -680,8 +685,8 @@ async function testCategoryFiltering(browser) {
             && (await page.locator('#search-results .search-result').textContent()).includes('Apple'),
         'task 12: Add Meal category selection displays only matching ingredients');
         const call = await page.evaluate(() => window.__browseCalls[0]);
-        assert(call[0] === 'Fruit' && call[2] === 100 && call[3] === 0,
-            'task 12: category filtering uses the public browse API with a bounded page');
+        assert(call[0] === null && call[2] === 10000 && call[3] === 0,
+            'task 12: category filtering loads the shared ingredient cache once');
     } finally {
         await context.close();
     }
@@ -874,6 +879,9 @@ async function testExplicitMealDatePassThrough(browser) {
             window.app.updateMealItemsList();
         });
         await page.locator('#btn-save-meal').click();
+        assert(await page.evaluate(() => window.__mealPayload === null),
+            'meal is not saved before nutrition confirmation');
+        await page.locator('.meal-confirm-save').click();
         await page.waitForFunction(() => window.__mealPayload !== null);
         const payload = await page.evaluate(() => window.__mealPayload);
         assert(payload.entryDate === selectedDate,

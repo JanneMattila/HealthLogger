@@ -1,4 +1,5 @@
-const { spawn, spawnSync } = require('child_process');
+const { spawn } = require('child_process');
+const { limits, runCommand, stopProcessTree } = require('./test-support');
 const fs = require('fs');
 const http = require('http');
 const net = require('net');
@@ -22,17 +23,18 @@ function getAvailablePort() {
     });
 }
 
-function waitForServer(child, baseUrl) {
+function waitForServer(child, baseUrl, timeout) {
     return new Promise((resolve, reject) => {
-        const deadline = Date.now() + 60000;
+        const deadline = Date.now() + timeout;
         const attempt = () => {
-            if (child.exitCode !== null) {
+            if (child && child.exitCode !== null) {
                 reject(new Error(`HealthLogger exited before startup with code ${child.exitCode}`));
                 return;
             }
             const request = http.get(baseUrl, response => {
                 response.resume();
-                resolve();
+                if (response.statusCode === 200) resolve();
+                else reject(new Error(`HealthLogger returned HTTP ${response.statusCode}`));
             });
             request.on('error', () => {
                 if (Date.now() >= deadline) reject(new Error('Timed out waiting for HealthLogger to start'));
@@ -46,20 +48,17 @@ function waitForServer(child, baseUrl) {
 
 function stopServer(child) {
     if (!child.pid || child.exitCode !== null) return;
-    if (process.platform === 'win32') {
-        spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-    } else {
-        child.kill('SIGTERM');
-    }
+    stopProcessTree(child.pid);
 }
 
 async function main() {
     if (testFiles.length === 0) throw new Error('No tests/*.test.js harnesses were found');
 
-    const port = await getAvailablePort();
-    const baseUrl = `http://127.0.0.1:${port}`;
-    const server = spawn('dotnet', ['run', '--project', projectPath, '--no-launch-profile'], {
+    const startedAt = Date.now();
+    const baseUrl = process.env.HEALTH_LOGGER_URL || `http://127.0.0.1:${await getAvailablePort()}`;
+    const server = process.env.HEALTH_LOGGER_URL ? null : spawn('dotnet', ['run', '--project', projectPath, '--no-launch-profile', '--no-restore', '-p:UseAppHost=false'], {
         cwd: repositoryRoot,
+        detached: process.platform !== 'win32',
         env: {
             ...process.env,
             ASPNETCORE_URLS: baseUrl,
@@ -68,25 +67,33 @@ async function main() {
         },
         stdio: ['ignore', 'pipe', 'pipe']
     });
-    server.stdout.pipe(process.stdout);
-    server.stderr.pipe(process.stderr);
+    server?.stdout.pipe(process.stdout);
+    server?.stderr.pipe(process.stderr);
+    server?.on('error', error => console.error(`Server startup failed: ${error.message}`));
 
     try {
-        await waitForServer(server, baseUrl);
+        await waitForServer(server, baseUrl, server ? limits.startup : limits.navigation);
         console.log(`Running ${testFiles.length} test harnesses against ${baseUrl}`);
+        console.log(`Limits: action ${limits.action} ms, navigation ${limits.navigation} ms, file ${limits.file} ms, suite ${limits.suite} ms`);
+        let passedFiles = 0;
         for (const testFile of testFiles) {
             console.log(`\n=== ${testFile} ===`);
-            const result = spawnSync(process.execPath, [path.join(__dirname, testFile)], {
+            const remaining = limits.suite - (Date.now() - startedAt);
+            if (remaining <= 0) throw new Error(`Suite exceeded its ${limits.suite} ms execution limit`);
+            const fileStartedAt = Date.now();
+            const result = await runCommand(process.execPath, [path.join(__dirname, testFile)], {
+                timeout: Math.min(limits.file, remaining),
                 cwd: repositoryRoot,
                 env: { ...process.env, HEALTH_LOGGER_URL: baseUrl },
-                stdio: 'inherit'
             });
-            if (result.error) throw result.error;
+            console.log(`=== ${testFile}: exit ${result.status}, ${Date.now() - fileStartedAt} ms ===`);
             if (result.status !== 0) process.exitCode = result.status || 1;
             if (process.exitCode) break;
+            passedFiles++;
         }
+        console.log(`\nResult: ${passedFiles}/${testFiles.length} files passed in ${Date.now() - startedAt} ms; exit code ${process.exitCode || 0}`);
     } finally {
-        stopServer(server);
+        if (server) stopServer(server);
     }
 }
 

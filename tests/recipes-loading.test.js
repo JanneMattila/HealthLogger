@@ -1,4 +1,4 @@
-const { chromium } = require('playwright');
+const { chromium } = require('./test-support');
 
 const baseUrl = process.env.HEALTH_LOGGER_URL || 'http://localhost:5188';
 

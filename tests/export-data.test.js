@@ -1,5 +1,4 @@
-const { chromium } = require('playwright');
-const { spawnSync } = require('child_process');
+const { chromium, limits, runCommand } = require('./test-support');
 const fs = require('fs');
 const path = require('path');
 
@@ -10,9 +9,8 @@ function assert(condition, message) {
 }
 
 (async () => {
-    const backend = spawnSync('dotnet', ['run', '--project', path.join(__dirname, 'ExportChecks'),
-        '--configuration', 'Release', '-p:UseAppHost=false'], { encoding: 'utf8' });
-    if (backend.error) throw backend.error;
+    const backend = await runCommand('dotnet', ['run', '--project', path.join(__dirname, 'ExportChecks'),
+        '--configuration', 'Release', '--no-restore', '-p:UseAppHost=false'], { captureOutput: true, timeout: limits.backend });
     if (backend.status !== 0) throw new Error(backend.stdout + backend.stderr);
     const lines = backend.stdout.trim().split(/\r?\n/);
     console.log(lines.filter(line => line.startsWith('PASS:')).join('\n'));
