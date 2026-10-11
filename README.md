@@ -103,7 +103,7 @@ $env:HEALTH_LOGGER_URL = "http://localhost:5188"
 npm test
 ```
 
-Tests fail fast: browser actions wait at most 3 seconds, navigation 5 seconds, browser launch 10 seconds, and export backend checks 30 seconds. The runner limits each test file to 60 seconds and the full run to 3 minutes, including startup (limited to 45 seconds). Timed-out process trees are stopped, with up to 5 seconds allowed for cleanup. The runner stops at the first failure and never shuts down an app supplied through `HEALTH_LOGGER_URL`.
+Tests fail fast: browser actions wait at most 3 seconds, navigation 5 seconds, browser launch 10 seconds, and export backend checks 75 seconds, including any rebuild after server changes. The runner limits each test file to 90 seconds and the full run to 3 minutes, including startup (limited to 45 seconds). Timed-out process trees are stopped, with up to 5 seconds allowed for cleanup. The runner stops at the first failure and never shuts down an app supplied through `HEALTH_LOGGER_URL`.
 
 ## License
 

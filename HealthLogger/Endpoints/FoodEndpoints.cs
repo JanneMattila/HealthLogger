@@ -118,6 +118,9 @@ public static class FoodEndpoints
         group.MapPost("/", async (FoodItemEntity food, HttpContext ctx, FoodRepository repo) =>
         {
             food.UserId = Guid.Parse(ctx.GetAppUserId());
+            if (!double.IsFinite(food.DefaultPortionGrams) || food.DefaultPortionGrams <= 0
+                || food.UnitWeightGrams is { } unitWeight && (!double.IsFinite(unitWeight) || unitWeight <= 0))
+                return Results.BadRequest();
             if (!string.IsNullOrWhiteSpace(food.Barcode) && string.IsNullOrWhiteSpace(food.Category))
                 food.Category = "Own";
             var created = await repo.CreateCustomFoodAsync(food);

@@ -142,7 +142,8 @@ public sealed record BarcodeFoodLookupResult(
     string? Source = null,
     string? Error = null,
     Guid? ExistingFoodId = null,
-    double DefaultPortionGrams = 100)
+    double DefaultPortionGrams = 100,
+    double? UnitWeightGrams = null)
 {
     public static BarcodeFoodLookupResult FromExisting(FoodItemEntity food, string barcode) => new(
         true,
@@ -161,5 +162,6 @@ public sealed record BarcodeFoodLookupResult(
         food.Salt,
         Source: food.BarcodeSource ?? "Health Logger",
         ExistingFoodId: food.Id,
-        DefaultPortionGrams: food.DefaultPortionGrams);
+        DefaultPortionGrams: food.DefaultPortionGrams,
+        UnitWeightGrams: food.UnitWeightGrams);
 }

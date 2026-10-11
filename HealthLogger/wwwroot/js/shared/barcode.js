@@ -88,9 +88,11 @@ Object.assign(App.prototype, {
                             <option value="">${this.t('all_categories')}</option>
                         </select>
                     </div>
-                    <div class="nutrition-input">
+                    <div class="ingredient-weight-grid barcode-weight-grid">
                         <label for="barcode-default-portion">${this.t('default_portion_label')}</label>
                         <input id="barcode-default-portion" type="number" inputmode="decimal" name="defaultPortionGrams" value="100" min="0.1" step="0.1" required />
+                        <label for="barcode-unit-weight">${this.t('unit_weight_grams')}</label>
+                        <input id="barcode-unit-weight" type="number" inputmode="decimal" name="unitWeightGrams" min="0.1" step="0.1" />
                     </div>
                     <h4>${this.t('per_100g')}</h4>
                     <div class="manual-nutrition-grid">
@@ -130,6 +132,7 @@ Object.assign(App.prototype, {
                 nameEn: result.nameEn,
                 category: result.existingFoodId ? result.category : 'Own',
                 defaultPortionGrams: result.defaultPortionGrams || 100,
+                unitWeightGrams: result.unitWeightGrams,
                 energyKcal: result.energyKcal,
                 energyKj: result.energyKj,
                 protein: result.protein,
@@ -216,6 +219,13 @@ Object.assign(App.prototype, {
                     setStatus(this.t('default_portion_required'), false, true);
                     return;
                 }
+                const unitWeightText = form.elements.unitWeightGrams.value.trim();
+                const unitWeightGrams = unitWeightText ? Number(unitWeightText) : null;
+                if (unitWeightGrams !== null && (!Number.isFinite(unitWeightGrams) || unitWeightGrams <= 0)) {
+                    setStatus(this.t('ingredient_weights_invalid'), false, true);
+                    form.elements.unitWeightGrams.focus();
+                    return;
+                }
 
                 const saveButton = form.querySelector('button[type="submit"]');
                 saveButton.disabled = true;
@@ -228,6 +238,7 @@ Object.assign(App.prototype, {
                         nameEn: nameEn || nameFi,
                         category: form.elements.category.value.trim() || null,
                         defaultPortionGrams,
+                        unitWeightGrams,
                         energyKcal: numberValue(form, 'energyKcal'),
                         energyKj: numberValue(form, 'energyKj'),
                         protein: numberValue(form, 'protein'),

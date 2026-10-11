@@ -5,9 +5,9 @@ const limits = Object.freeze({
     action: 3000,
     navigation: 5000,
     browserLaunch: 10000,
-    backend: 30000,
+    backend: 75000,
     startup: 45000,
-    file: 60000,
+    file: 90000,
     suite: 180000
 });
 

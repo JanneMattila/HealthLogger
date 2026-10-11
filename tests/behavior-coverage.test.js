@@ -583,6 +583,49 @@ async function testManualIngredientCreation(browser) {
     }
 }
 
+async function testBarcodeIngredientUnitWeight(browser) {
+    const { context, page } = await openPage(browser);
+    try {
+        await initializeApp(page);
+        await page.evaluate(() => {
+            window.__createdBarcodeFood = null;
+            window.__addedMealFood = null;
+            API.getFoodCategories = async () => ['Own'];
+            API.lookupBarcode = async barcode => ({ found: false, barcode });
+            API.createFood = async food => {
+                window.__createdBarcodeFood = food;
+                return { id: 'barcode-food', isUserCreated: true, ...food };
+            };
+            app.showMealIngredientDialog = food => { window.__addedMealFood = food; };
+        });
+        await navigate(page, 'add-meal', '.add-meal-page');
+        await page.locator('#btn-barcode-meal').click();
+        await page.locator('#barcode-value').fill('12345678');
+        await page.locator('.barcode-lookup-form button[type="submit"]').click();
+        const form = page.locator('.barcode-review-form');
+        const unitWeight = form.getByLabel(await page.evaluate(() => app.t('unit_weight_grams')));
+        assert(await unitWeight.isVisible(), 'new ingredient barcode form includes a labelled unit weight');
+        await form.locator('[name="nameEn"]').fill('Protein bar');
+        await form.locator('[name="energyKcal"]').fill('350');
+        await unitWeight.fill('0');
+        await form.locator('button[type="submit"]').click();
+        assert(await page.evaluate(() => window.__createdBarcodeFood === null)
+            && (await unitWeight.evaluate(input => !input.checkValidity())
+                || await page.locator('.barcode-status.error').isVisible()),
+        'non-positive unit weights are rejected before saving');
+        await unitWeight.fill('55.5');
+        await form.locator('button[type="submit"]').click();
+        await page.waitForFunction(() => window.__addedMealFood !== null);
+        const created = await page.evaluate(() => window.__createdBarcodeFood);
+        assert(created.unitWeightGrams === 55.5 && created.defaultPortionGrams === 100,
+            'barcode ingredient creation saves the entered unit weight');
+        assert(await page.evaluate(() => window.__addedMealFood.unitWeightGrams) === 55.5,
+            'the newly created ingredient opens in Add Meal with its unit weight');
+    } finally {
+        await context.close();
+    }
+}
+
 function mealEntries() {
     const apple = { id: 'apple', nameEn: 'Apple', nameFi: 'Omena', energyKcal: 50, protein: 1, fat: 0, carbohydrate: 12 };
     const soup = { id: 'soup', nameEn: 'Soup', nameFi: 'Keitto', energyKcal: 80, protein: 4, fat: 2, carbohydrate: 8 };
@@ -906,6 +949,7 @@ async function testExplicitMealDatePassThrough(browser) {
         await testCustomDrinkConsumption(browser);
         await testIngredientBarcodeAction(browser);
         await testManualIngredientCreation(browser);
+        await testBarcodeIngredientUnitWeight(browser);
         await testMealGroupingViews(browser);
         await testIdentifyFoodRemoval(browser);
         await testCategoryFiltering(browser);
