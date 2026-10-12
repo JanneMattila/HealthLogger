@@ -553,7 +553,48 @@ Object.assign(App.prototype, {
         };
     },
 
+    buildRecipeMealItems(recipe, multiplier, grams, calories, nutrientValues) {
+        const recipeInstanceId = globalThis.crypto?.randomUUID?.()
+            || 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
+        const recipeFields = { sourceRecipeId: recipe.id, sourceRecipeName: recipe.name, recipeInstanceId };
+        const ingredients = (recipe.ingredients || []).filter(ingredient => ingredient.foodItemId || ingredient.foodItem?.id);
+        if (ingredients.length > 0) {
+            return ingredients.map(ingredient => {
+                const food = ingredient.foodItem || {};
+                const portion = parseFloat((Number(ingredient.portionGrams || 0) * multiplier).toFixed(2));
+                const kcalPer100 = Number(food.energyKcal) || 0;
+                return {
+                    id: ingredient.foodItemId || food.id,
+                    name: ingredient.foodItem ? this.getLocalizedName(food) : recipe.name,
+                    portion,
+                    calories: kcalPer100 * portion / 100,
+                    customCalories: null,
+                    kcalPer100,
+                    protein: Number(food.protein) || 0,
+                    fat: Number(food.fat) || 0,
+                    carbs: Number(food.carbohydrate) || 0,
+                    ...recipeFields
+                };
+            });
+        }
+        const portion = parseFloat(grams.toFixed(2));
+        const per100 = value => portion > 0 ? (Number(value) || 0) * 100 / portion : 0;
+        return [{
+            id: null,
+            name: recipe.name,
+            portion,
+            calories,
+            customCalories: calories,
+            kcalPer100: per100(calories),
+            protein: per100(nutrientValues[0]),
+            fat: per100(nutrientValues[1]),
+            carbs: per100(nutrientValues[3]),
+            ...recipeFields
+        }];
+    },
+
     showRecipePortionSelector(recipe, mealType = null, consumptionTime = null, mealDate = null, options = {}) {
+        const addToMeal = typeof options.addToMeal === 'function' ? options.addToMeal : null;
         const mealTypes = this.getMealTypes().map(value => ({ value, label: this.t(`meal_${value}`) }));
         let selectedMealType = mealTypes.some(item => item.value === mealType)
             ? mealType
@@ -595,6 +636,7 @@ Object.assign(App.prototype, {
         overlay.innerHTML = `
             <div class="portion-content recipe-use-dialog">
                 <h3>${recipe.name}</h3>
+                ${addToMeal ? '' : `
                 <label>${this.t('meal_type_label')}</label>
                 <div class="meal-type-selector recipe-meal-selector" role="radiogroup" aria-label="${this.t('meal_type_label')}">
                     ${mealTypes.map(item => `
@@ -605,7 +647,7 @@ Object.assign(App.prototype, {
                 <div class="consumption-time-field">
                     <label for="recipe-consumption-time">${this.t('consumption_time')}</label>
                     <input type="time" id="recipe-consumption-time" value="${consumptionTime || this.getCurrentTimeValue()}" step="60" />
-                </div>
+                </div>`}
                 <div class="nutrition-mode-selector recipe-portion-mode" role="group" aria-label="${this.t('recipe_amount_mode')}">
                     <button type="button" class="nutrition-mode active" data-mode="quantity">${this.t('quantity')}</button>
                     <button type="button" class="nutrition-mode" data-mode="percent">${this.t('percentage')}</button>
@@ -731,7 +773,7 @@ Object.assign(App.prototype, {
             const grams = baseWeight * multiplier;
             const calories = baseCalories * multiplier;
             const nutrientValues = baseNutrients.map(nutrient => nutrient * multiplier);
-            const consumptionTime = overlay.querySelector('#recipe-consumption-time').value;
+            const consumptionTime = overlay.querySelector('#recipe-consumption-time')?.value || '';
             const opts = mode === 'grams'
                 ? { portionGrams: value }
                 : { portionMultiplier: mode === 'percent' ? value / 100 : value };
@@ -745,7 +787,7 @@ Object.assign(App.prototype, {
                     <h3 id="${confirmationTitleId}">${this.t('confirm_recipe_add')}</h3>
                     <div class="ingredient-confirmation-summary">
                         <strong>${escapeRecipeHtml(recipe.name)}</strong>
-                        <span>${this.t(`meal_${selectedMealType}`)} · ${consumptionTime} · ${formatNutrient(grams)} g</span>
+                        <span>${addToMeal ? '' : `${this.t(`meal_${selectedMealType}`)} · ${consumptionTime} · `}${formatNutrient(grams)} g</span>
                     </div>
                     <table class="nutrient-table">
                         <tr><td>${this.t('energy')}</td><td class="nutrient-value">${Math.round(calories)} kcal</td></tr>
@@ -773,6 +815,13 @@ Object.assign(App.prototype, {
                 saving = true;
                 const confirmationButtons = confirmation.querySelectorAll('button');
                 confirmationButtons.forEach(button => { button.disabled = true; });
+                if (addToMeal) {
+                    addToMeal(this.buildRecipeMealItems(recipe, multiplier, grams, calories, nutrientValues));
+                    closeConfirmation(false);
+                    overlay.remove();
+                    if (options.returnFocus?.isConnected) options.returnFocus.focus();
+                    return;
+                }
                 try {
                     await API.addRecipeAsMeal(recipe.id, {
                         entryDate: mealDate || this.getLocalDateValue(),

@@ -33,7 +33,7 @@ public static class EntryEndpoints
         });
 
         group.MapPost("/meal", async (CreateMealRequest request, HttpContext ctx,
-            EntryRepository repo, FoodRepository foodRepo) =>
+            EntryRepository repo, FoodRepository foodRepo, RecipeRepository recipeRepo) =>
         {
             var mealTypes = new[] { "breakfast", "lunch", "snack", "dinner", "supper" };
             if (!mealTypes.Contains(request.MealType) || request.Items is null || request.Items.Count == 0 ||
@@ -45,6 +45,7 @@ public static class EntryEndpoints
 
             var userId = Guid.Parse(ctx.GetAppUserId());
             var items = new List<FoodEntryItemEntity>();
+            var recipes = new Dictionary<Guid, CustomRecipeEntity>();
             foreach (var requestItem in request.Items)
             {
                 FoodItemEntity? food = null;
@@ -53,13 +54,26 @@ public static class EntryEndpoints
                     food = await foodRepo.GetAccessibleByIdAsync(userId, foodItemId);
                     if (food is null) return Results.BadRequest();
                 }
+                CustomRecipeEntity? recipe = null;
+                if (requestItem.SourceRecipeId is Guid sourceRecipeId)
+                {
+                    if (!recipes.TryGetValue(sourceRecipeId, out recipe))
+                    {
+                        recipe = await recipeRepo.GetByIdAsync(userId.ToString(), sourceRecipeId);
+                        if (recipe is null) return Results.BadRequest();
+                        recipes[sourceRecipeId] = recipe;
+                    }
+                }
                 items.Add(new FoodEntryItemEntity
                 {
                     FoodItemId = requestItem.FoodItemId,
                     FoodItem = food,
                     PortionGrams = requestItem.PortionGrams,
                     CustomCalories = requestItem.CustomCalories,
-                    Notes = requestItem.Notes
+                    Notes = requestItem.Notes,
+                    SourceRecipeId = recipe?.Id,
+                    SourceRecipeName = recipe?.Name,
+                    RecipeInstanceId = recipe is null ? null : requestItem.RecipeInstanceId ?? Guid.NewGuid()
                 });
             }
 
@@ -123,6 +137,7 @@ public static class EntryEndpoints
 
 public sealed record UpdateEntryItemRequest(double PortionGrams);
 public sealed record UpdateMealRequest(DateOnly EntryDate, TimeOnly ConsumptionTime, string MealType, string? Notes);
-public sealed record CreateMealItemRequest(Guid? FoodItemId, double PortionGrams, double? CustomCalories, string? Notes);
+public sealed record CreateMealItemRequest(Guid? FoodItemId, double PortionGrams, double? CustomCalories, string? Notes,
+    Guid? SourceRecipeId = null, Guid? RecipeInstanceId = null);
 public sealed record CreateMealRequest(DateOnly EntryDate, TimeOnly ConsumptionTime, string MealType, string? Notes,
     List<CreateMealItemRequest> Items);
