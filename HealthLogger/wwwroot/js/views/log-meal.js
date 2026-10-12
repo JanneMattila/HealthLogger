@@ -626,7 +626,9 @@ Object.assign(App.prototype, {
                         foodItemId: item.id || undefined,
                         portionGrams: Number(item.portion),
                         customCalories: item.customCalories ?? undefined,
-                        notes: item.id ? null : item.name
+                        notes: item.id ? null : item.name,
+                        sourceRecipeId: item.sourceRecipeId || undefined,
+                        recipeInstanceId: item.recipeInstanceId || undefined
                     }))
                 });
             } catch (error) {
@@ -677,7 +679,7 @@ Object.assign(App.prototype, {
         try {
             let recent = JSON.parse(localStorage.getItem('recentFoods') || '[]');
             for (const item of items) {
-                if (!item.id) continue;
+                if (!item.id || item.sourceRecipeId) continue;
                 recent = recent.filter(r => r.id !== item.id);
                 recent.unshift({
                     id: item.id,
@@ -804,7 +806,10 @@ Object.assign(App.prototype, {
                     if (recipe) this.showRecipePortionSelector(recipe, this.currentMealType,
                         document.getElementById('meal-consumption-time')?.value,
                         document.getElementById('meal-entry-date')?.value, {
-                            onAdded: () => this.persistMealDraft(),
+                            addToMeal: items => {
+                                this.mealItems.push(...items);
+                                this.updateMealItemsList();
+                            },
                             returnFocus: el
                         });
                 };
@@ -866,7 +871,7 @@ Object.assign(App.prototype, {
 
         list.innerHTML = this.mealItems.map((item, i) => `
             <div class="meal-item">
-                <span>${item.name}</span>
+                <span>${item.sourceRecipeName && item.id ? `${escapeIngredientHtml(item.sourceRecipeName)}: ` : ''}${item.name}</span>
                 <input type="number" class="meal-item-portion" data-index="${i}" value="${item.portion}" min="0.01" step="any" aria-label="${this.t('amount_grams')}" />
                 <span>${this.formatCalories(item.calories)}</span>
                 <button class="remove-btn" data-index="${i}" title="${this.t('btn_delete')}" aria-label="${this.t('btn_delete')}">✕</button>

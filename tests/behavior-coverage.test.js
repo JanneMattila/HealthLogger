@@ -169,21 +169,38 @@ async function testMealFavoritesAndRecipes(browser) {
         await page.locator('#meal-entry-date').fill('2026-09-10');
         await page.locator('#meal-consumption-time').fill('12:34');
         await page.locator('.meal-composer-details [data-meal="lunch"]').click();
-        await page.evaluate(() => { API.addRecipeAsMeal = async (id, data) => { window.__addedRecipe = { id, ...data }; }; });
+        await page.evaluate(() => {
+            API.addRecipeAsMeal = async (id, data) => { window.__addedRecipe = { id, ...data }; };
+            API.createMeal = async data => { window.__createdMeal = data; };
+        });
+        const existingItems = await page.evaluate(() => app.mealItems.length);
         await page.locator('.recipe-quick-item').press('Enter');
         await page.locator('.recipe-use-dialog').waitFor();
+        assert(await page.locator('.recipe-use-dialog .recipe-meal-selector').count() === 0,
+            'recipe dialog in the meal editor uses the meal type and time of the meal');
         await page.locator('#recipe-portion-quantity').fill('2');
         await page.locator('#btn-rp-add').click();
-        assert(await page.evaluate(() => window.__addedRecipe === undefined),
-            'recipe is not saved before confirmation');
+        assert(await page.evaluate(count => app.mealItems.length === count, existingItems),
+            'recipe is not added before confirmation');
         await page.locator('.recipe-confirm-add').click();
-        await page.waitForFunction(() => !!window.__addedRecipe);
-        const added = await page.evaluate(() => window.__addedRecipe);
-        assert(added.id === 'recipe' && added.entryDate === '2026-09-10' && added.mealType === 'lunch'
-            && added.consumptionTime === '12:34:00' && added.portionMultiplier === 2,
-        'recipe selection submits the chosen portion with the Add Meal date, time and meal type');
+        await page.locator('.recipe-use-dialog').waitFor({ state: 'detached' });
+        const recipeItems = await page.evaluate(count => app.mealItems.slice(count), existingItems);
+        assert(await page.evaluate(() => window.__addedRecipe === undefined),
+            'recipe is not saved as a separate meal entry');
+        assert(recipeItems.length === 1 && recipeItems[0].sourceRecipeId === 'recipe'
+            && recipeItems[0].customCalories === 250 && recipeItems[0].portion === 200,
+        'recipe selection adds the chosen portion to the meal being composed');
         assert(await page.evaluate(() => app.currentPage) === 'add-meal',
             'recipe confirmation keeps the meal editor open');
+        await page.locator('#btn-save-meal').click();
+        await page.locator('.meal-confirm-save').click();
+        await page.waitForFunction(() => !!window.__createdMeal);
+        const createdMeal = await page.evaluate(() => window.__createdMeal);
+        const savedRecipeItem = createdMeal.items[createdMeal.items.length - 1];
+        assert(createdMeal.entryDate === '2026-09-10' && createdMeal.mealType === 'lunch'
+            && createdMeal.consumptionTime === '12:34:00' && savedRecipeItem.sourceRecipeId === 'recipe'
+            && savedRecipeItem.recipeInstanceId && savedRecipeItem.customCalories === 250 && savedRecipeItem.notes === 'Milk recipe',
+        'recipe items are saved as part of the meal with its date, time and meal type');
 
         await page.evaluate(() => { API.getRecipes = async () => []; });
         await navigate(page, 'add-meal', '.add-meal-page');
