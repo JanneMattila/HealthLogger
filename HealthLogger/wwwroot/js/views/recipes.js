@@ -787,7 +787,7 @@ Object.assign(App.prototype, {
                     <h3 id="${confirmationTitleId}">${this.t('confirm_recipe_add')}</h3>
                     <div class="ingredient-confirmation-summary">
                         <strong>${escapeRecipeHtml(recipe.name)}</strong>
-                        <span>${addToMeal ? '' : `${this.t(`meal_${selectedMealType}`)} · ${consumptionTime} · `}${formatNutrient(grams)} g</span>
+                        <span>${addToMeal ? '' : `${this.t(`meal_${selectedMealType}`)} · ${escapeRecipeHtml(consumptionTime)} · `}${formatNutrient(grams)} g</span>
                     </div>
                     <table class="nutrient-table">
                         <tr><td>${this.t('energy')}</td><td class="nutrient-value">${Math.round(calories)} kcal</td></tr>
