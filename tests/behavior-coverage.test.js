@@ -785,7 +785,13 @@ async function testRecentSearchAndPagination(browser) {
         await search.fill('missing');
         assert(await rows.count() === 0 && await page.locator('#meal-recent-items .meal-source-empty').isVisible(),
             'task 13: recent search presents an empty state for no matches');
-        await search.fill('Other 30');
+        await search.fill('');
+        await search.pressSequentially('Other 3');
+        assert(await search.inputValue() === 'Other 3',
+            'task 13: typing in recent search keeps the caret at the end so characters stay in order');
+        await search.pressSequentially('0');
+        assert(await search.inputValue() === 'Other 30' && await rows.count() === 1,
+            'task 13: recent search keeps focus while typing and filters to the typed term');
         await rows.first().click();
         await page.locator('.ingredient-detail-title', { hasText: 'Other 30' }).waitFor();
         assert(await page.locator('.ingredient-detail[role="dialog"]').isVisible(),
