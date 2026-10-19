@@ -368,5 +368,19 @@
     "barcode_saving": "Saving product...",
     "barcode_name_required": "Enter a product name.",
     "barcode_add_favorite": "Add to favorites",
-    "barcode_food_saved": "Product saved"
+    "barcode_food_saved": "Product saved",
+    "nav_tools": "🧮 Tools",
+    "page_tools": "🧮 Tools",
+    "tools_calorie_calculator": "Calorie calculator",
+    "tools_nutrient": "Nutrient",
+    "tools_grams": "Grams",
+    "tools_g_per_kg": "g/kg",
+    "tools_total": "Total",
+    "tools_protein": "Protein",
+    "tools_carbs": "Carbohydrates",
+    "tools_fat": "Fat",
+    "tools_fiber": "Fiber",
+    "tools_alcohol": "Alcohol",
+    "tools_clear": "Clear",
+    "tools_calorie_hint": "Energy factors: protein 4, carbohydrates 4, fat 9, fiber 2 and alcohol 7 kcal/g. The g/kg column shows grams per kilogram of body weight; the total row shows kcal/kg."
 }

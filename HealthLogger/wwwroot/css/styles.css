@@ -1241,3 +1241,13 @@ input[type="date"], input[type="time"] {
 @media (max-width: 480px) {
     .drink-favorites-list { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Tools */
+.tools-table { width: 100%; border-collapse: collapse; }
+.tools-table th, .tools-table td { padding: 0.4rem 0.35rem; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.tools-table th:first-child { text-align: left; white-space: normal; }
+.tools-table thead th { font-size: 0.85rem; color: var(--text-secondary); font-weight: 600; }
+.tools-table tbody input[type="number"] { width: 6rem; text-align: right; }
+.tools-table tfoot th, .tools-table tfoot td { font-weight: 700; border-bottom: none; }
+.tools-table .tools-factor { display: block; font-size: 0.75rem; font-weight: 400; color: var(--text-secondary); }
+.tools-table td.tools-gkg, .tools-table #tools-kcal-per-kg { color: var(--primary); font-weight: 600; }

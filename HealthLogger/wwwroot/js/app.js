@@ -19,6 +19,7 @@ class App {
             checkin: '/checkin',
             metrics: '/metrics',
             stats: '/stats',
+            tools: '/tools',
             preferences: '/preferences'
         };
         this.historyNavigationReady = false;
@@ -384,6 +385,7 @@ class App {
             case 'checkin': await this.setupCheckin(); break;
             case 'metrics': await this.setupMetrics(); break;
             case 'stats': await this.setupStats(); break;
+            case 'tools': await this.setupTools(); break;
             case 'preferences': await this.setupPreferences(); break;
         }
     }
