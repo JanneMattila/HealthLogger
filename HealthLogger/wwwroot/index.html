@@ -49,6 +49,7 @@
                     <li class="nav-item" data-page="metrics" data-i18n="nav_metrics">⚖️ Metrics</li>
                     <li class="nav-item" data-page="stats" data-i18n="nav_stats">📈 Stats</li>
                     <li class="nav-item" data-page="history" data-i18n="nav_history">📅 History</li>
+                    <li class="nav-item" data-page="tools" data-i18n="nav_tools">🧮 Tools</li>
                     <li class="nav-item" data-page="preferences" data-i18n="nav_preferences">⚙️ Preferences</li>
                 </ul>
             </nav>
@@ -468,6 +469,42 @@
         </div>
     </template>
 
+    <template id="tmpl-tools">
+        <div class="page tools">
+            <h2 data-i18n="page_tools">🧮 Tools</h2>
+            <h3 data-i18n="tools_calorie_calculator">Calorie calculator</h3>
+            <form id="tools-calorie-form" autocomplete="off">
+                <div class="metrics-group">
+                    <label for="tools-weight" data-i18n="label_weight">⚖️ Weight (kg)</label>
+                    <input type="number" id="tools-weight" name="weightKg" step="0.1" min="0" inputmode="decimal" />
+                </div>
+                <div class="metrics-group">
+                    <table class="tools-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="tools_nutrient">Nutrient</th>
+                                <th data-i18n="tools_grams">Grams</th>
+                                <th data-i18n="kcal">kcal</th>
+                                <th data-i18n="tools_g_per_kg">g/kg</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tools-calorie-rows"></tbody>
+                        <tfoot>
+                            <tr>
+                                <th data-i18n="tools_total">Total</th>
+                                <td id="tools-total-grams">0</td>
+                                <td id="tools-total-kcal">0</td>
+                                <td id="tools-kcal-per-kg">—</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <p class="field-hint" data-i18n="tools_calorie_hint">Energy factors: protein 4, carbohydrates 4, fat 9, fiber 2 and alcohol 7 kcal/g. The g/kg column shows grams per kilogram of body weight; the total row shows kcal/kg.</p>
+                </div>
+                <button type="button" class="btn btn-secondary" id="tools-clear" data-i18n="tools_clear">Clear</button>
+            </form>
+        </div>
+    </template>
+
     <template id="tmpl-stats">
         <div class="page stats">
             <h2 data-i18n="page_stats">📈 Statistics</h2>
@@ -602,5 +639,6 @@
     <script src="/js/views/stats.js?v=00000000000000"></script>
     <script src="/js/views/preferences.js?v=00000000000000"></script>
     <script src="/js/views/ingredients.js?v=00000000000000"></script>
+    <script src="/js/views/tools.js?v=00000000000000"></script>
 </body>
 </html>

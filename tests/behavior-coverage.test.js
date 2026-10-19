@@ -692,6 +692,38 @@ function activeSourceFiles(directory) {
     });
 }
 
+async function testToolsCalorieCalculator(browser) {
+    const { context, page } = await openPage(browser);
+    try {
+        await initializeApp(page);
+        await page.evaluate(() => {
+            localStorage.removeItem('HealthLogger_tools_calories');
+            API.getLatestMetrics = async () => ({ weightKg: 100 });
+        });
+        await navigate(page, 'tools', '#tools-calorie-form');
+        await page.waitForFunction(() => document.getElementById('tools-weight').value === '100');
+        assert(await page.evaluate(() => window.location.pathname) === '/tools',
+            'tools: page is routed to /tools');
+
+        await page.locator('#tools-calorie-form [name="protein"]').fill('100');
+        await page.locator('#tools-calorie-form [name="carbs"]').fill('250');
+        await page.locator('#tools-calorie-form [name="fat"]').fill('70');
+        const result = await page.evaluate(() => ({
+            proteinKcal: document.querySelector('tr[data-nutrient="protein"] .tools-kcal').textContent,
+            proteinGkg: document.querySelector('tr[data-nutrient="protein"] .tools-gkg').textContent,
+            fatGkg: document.querySelector('tr[data-nutrient="fat"] .tools-gkg').textContent,
+            totalKcal: document.getElementById('tools-total-kcal').textContent.replace(/\D/g, ''),
+            kcalPerKg: document.getElementById('tools-kcal-per-kg').textContent
+        }));
+        assert(result.proteinKcal === '400' && result.proteinGkg === '1.00' && result.fatGkg === '0.70',
+            'tools: 100 g protein at 100 kg is 400 kcal and 1.00 g/kg');
+        assert(result.totalKcal === '2030' && result.kcalPerKg.startsWith('20.3'),
+            'tools: total calories and kcal/kg are calculated from all macros');
+    } finally {
+        await context.close();
+    }
+}
+
 async function testIdentifyFoodRemoval(browser) {
     const sourceRoot = path.join(__dirname, '..', 'HealthLogger');
     const sourceText = activeSourceFiles(sourceRoot).map(file => fs.readFileSync(file, 'utf8')).join('\n');
@@ -960,6 +992,7 @@ async function testExplicitMealDatePassThrough(browser) {
         await testMealFavoritesAndRecipes(browser);
         await testCheckinStepsAndFocus(browser);
         await testMetricsUnchangedAndMeasuredNow(browser);
+        await testToolsCalorieCalculator(browser);
         await testDrinkSelectionAndSharedConfirmation(browser);
         await testSharedDrinkConsumption(browser, { width: 390, height: 844 }, 'en');
         await testSharedDrinkConsumption(browser, { width: 1280, height: 900 }, 'fi');

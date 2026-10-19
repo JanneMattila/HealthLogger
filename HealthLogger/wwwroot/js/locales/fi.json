@@ -368,5 +368,19 @@
     "barcode_saving": "Tallennetaan tuotetta...",
     "barcode_name_required": "Syötä tuotteen nimi.",
     "barcode_add_favorite": "Lisää suosikkeihin",
-    "barcode_food_saved": "Tuote tallennettu"
+    "barcode_food_saved": "Tuote tallennettu",
+    "nav_tools": "🧮 Työkalut",
+    "page_tools": "🧮 Työkalut",
+    "tools_calorie_calculator": "Kalorilaskuri",
+    "tools_nutrient": "Ravintoaine",
+    "tools_grams": "Grammat",
+    "tools_g_per_kg": "g/kg",
+    "tools_total": "Yhteensä",
+    "tools_protein": "Proteiini",
+    "tools_carbs": "Hiilihydraatit",
+    "tools_fat": "Rasva",
+    "tools_fiber": "Kuitu",
+    "tools_alcohol": "Alkoholi",
+    "tools_clear": "Tyhjennä",
+    "tools_calorie_hint": "Energiakertoimet: proteiini 4, hiilihydraatit 4, rasva 9, kuitu 2 ja alkoholi 7 kcal/g. Sarake g/kg näyttää grammat painokiloa kohden; yhteensä-rivi näyttää kcal/kg."
 }

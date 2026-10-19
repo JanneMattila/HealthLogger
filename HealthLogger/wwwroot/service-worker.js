@@ -24,6 +24,7 @@ const STATIC_ASSETS = [
     `/js/views/stats.js?v=${CACHE_VERSION}`,
     `/js/views/preferences.js?v=${CACHE_VERSION}`,
     `/js/views/ingredients.js?v=${CACHE_VERSION}`,
+    `/js/views/tools.js?v=${CACHE_VERSION}`,
     `/js/locales/en.json?v=${CACHE_VERSION}`,
     `/js/locales/fi.json?v=${CACHE_VERSION}`,
     '/manifest.json'

@@ -299,7 +299,7 @@ app.MapUserEndpoints();
 var spaRoutes = new[]
 {
     "/today", "/history", "/meals", "/meals/new", "/drinks", "/recipes", "/ingredients", "/checkin",
-    "/metrics", "/stats", "/preferences"
+    "/metrics", "/stats", "/tools", "/preferences"
 };
 foreach (var route in spaRoutes)
 {
