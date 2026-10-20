@@ -61,8 +61,8 @@ Object.assign(App.prototype, {
 
             document.getElementById('tools-total-grams').textContent = formatNumber(round1(totalGrams), 1);
             document.getElementById('tools-total-kcal').textContent = formatNumber(Math.round(totalKcal), 0);
-            document.getElementById('tools-kcal-per-kg').textContent = weightKg > 0
-                ? `${formatNumber(totalKcal / weightKg, 1)} kcal/kg`
+            document.getElementById('tools-kcal-per-kg').innerHTML = weightKg > 0
+                ? `${formatNumber(totalKcal / weightKg, 1)}<span class="tools-unit">kcal/kg</span>`
                 : '—';
 
             localStorage.setItem(storageKey, JSON.stringify(state));
