@@ -416,7 +416,7 @@ Object.assign(App.prototype, {
         const renderPortionPresets = () => {
             if (drink) {
                 overlay.querySelector('.ingredient-portion-presets').innerHTML = drink.presets.map(preset =>
-                    `<button type="button" class="btn btn-secondary btn-sm ingredient-portion-preset" data-amount="${preset.amount}">${escapeIngredientHtml(preset.label)}</button>`
+                    `<button type="button" class="btn btn-secondary btn-sm ingredient-portion-preset" data-amount="${preset.amount}">+${escapeIngredientHtml(preset.label)}</button>`
                 ).join('');
                 return;
             }
@@ -500,8 +500,8 @@ Object.assign(App.prototype, {
             if (!button) return;
             const currentAmount = Number(amountInput.value) || 0;
             if (drink) {
-                amountInput.value = button.dataset.amount;
-                unitSelect.value = 'ml';
+                const mlPerUnit = this.convertToMl(1000, unitSelect.value) / 1000 || 1;
+                amountInput.value = parseFloat((currentAmount + Number(button.dataset.amount) / mlPerUnit).toFixed(2));
             } else {
                 amountInput.value = parseFloat((currentAmount + Number(button.dataset.amount)).toFixed(1));
             }

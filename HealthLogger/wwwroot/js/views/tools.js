@@ -1,9 +1,9 @@
 // Tools view
 Object.assign(App.prototype, {
     toolsCalorieNutrients: [
-        { key: 'protein', labelKey: 'tools_protein', kcalPerGram: 4 },
-        { key: 'carbs', labelKey: 'tools_carbs', kcalPerGram: 4 },
-        { key: 'fat', labelKey: 'tools_fat', kcalPerGram: 9 },
+        { key: 'protein', labelKey: 'tools_protein', kcalPerGram: 4, defaultGrams: 90 },
+        { key: 'carbs', labelKey: 'tools_carbs', kcalPerGram: 4, defaultGrams: 260 },
+        { key: 'fat', labelKey: 'tools_fat', kcalPerGram: 9, defaultGrams: 67 },
         { key: 'fiber', labelKey: 'tools_fiber', kcalPerGram: 2 },
         { key: 'alcohol', labelKey: 'tools_alcohol', kcalPerGram: 7 }
     ],
@@ -26,8 +26,9 @@ Object.assign(App.prototype, {
                 <td class="tools-gkg">—</td>
             </tr>`).join('');
 
+        // Recommended split for ~2000 kcal: protein 18 %, carbohydrates 52 %, fat 30 % of energy.
         this.toolsCalorieNutrients.forEach(n => {
-            if (saved[n.key] != null && saved[n.key] !== '') form.elements[n.key].value = saved[n.key];
+            if (n.defaultGrams) form.elements[n.key].value = n.defaultGrams;
         });
         if (saved.weightKg) weightInput.value = saved.weightKg;
 
@@ -52,7 +53,6 @@ Object.assign(App.prototype, {
                 const kcal = grams * n.kcalPerGram;
                 totalGrams += grams;
                 totalKcal += kcal;
-                state[n.key] = input.value;
 
                 const row = rows.querySelector(`tr[data-nutrient="${n.key}"]`);
                 row.querySelector('.tools-kcal').textContent = formatNumber(Math.round(kcal), 0);

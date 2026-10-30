@@ -704,20 +704,29 @@ Object.assign(App.prototype, {
             container.className = 'recent-foods';
             let visibleCount = 25;
             let query = this.mealRecentSearchQuery || '';
+            container.innerHTML = `<h3>${this.t('recent_foods')}</h3>
+                <div class="food-search">
+                    <input type="search" class="recent-food-search" value="${escapeIngredientHtml(query)}"
+                           placeholder="${this.t('recent_foods_search_placeholder')}"
+                           aria-label="${this.t('recent_foods_search_placeholder')}">
+                </div>
+                <div class="recent-food-results"></div>`;
+            const results = container.querySelector('.recent-food-results');
+            container.querySelector('.recent-food-search')?.addEventListener('input', event => {
+                query = event.target.value;
+                this.mealRecentSearchQuery = query;
+                visibleCount = 25;
+                this.persistMealDraft();
+                renderPage();
+            });
             const renderPage = () => {
                 const locale = window.i18n?.lang || 'en';
-                const normalizedQuery = query.toLocaleLowerCase(locale);
+                const normalizedQuery = query.trim().toLocaleLowerCase(locale);
                 const filteredRecent = normalizedQuery
                     ? recent.filter(food => String(food.name || '').toLocaleLowerCase(locale).includes(normalizedQuery))
                     : recent;
                 const visible = filteredRecent.slice(0, visibleCount);
-                container.innerHTML = `<h3>${this.t('recent_foods')}</h3>
-                    <div class="food-search">
-                        <input type="search" class="recent-food-search" value="${escapeIngredientHtml(query)}"
-                               placeholder="${this.t('recent_foods_search_placeholder')}"
-                               aria-label="${this.t('recent_foods_search_placeholder')}">
-                    </div>`
-                    + (visible.length ? visible.map((f, index) => `
+                results.innerHTML = (visible.length ? visible.map((f, index) => `
                     <div class="search-result" data-recent-index="${index}">
                         <div class="food-name">${escapeIngredientHtml(f.name)}</div>
                         <div class="food-cal">${this.formatCalories(f.kcal)} (${f.portion} g)</div>
@@ -726,16 +735,7 @@ Object.assign(App.prototype, {
                     + (visibleCount < filteredRecent.length
                         ? `<button type="button" class="btn btn-secondary recent-load-more">${this.t('btn_load_more')}</button>`
                         : '');
-                const filterInput = container.querySelector('.recent-food-search');
-                filterInput?.addEventListener('input', event => {
-                    query = event.target.value.trim();
-                    this.mealRecentSearchQuery = query;
-                    visibleCount = 25;
-                    this.persistMealDraft();
-                    renderPage();
-                    container.querySelector('.recent-food-search')?.focus();
-                });
-                container.querySelectorAll('.search-result').forEach(el => {
+                results.querySelectorAll('.search-result').forEach(el => {
                     const recentFood = visible[Number(el.dataset.recentIndex)];
                     const showIngredient = async () => {
                         try {
@@ -765,7 +765,7 @@ Object.assign(App.prototype, {
                         }
                     });
                 });
-                container.querySelector('.recent-load-more')?.addEventListener('click', () => {
+                results.querySelector('.recent-load-more')?.addEventListener('click', () => {
                     visibleCount += 25;
                     renderPage();
                 });

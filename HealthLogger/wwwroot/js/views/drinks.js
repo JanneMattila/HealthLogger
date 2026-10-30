@@ -58,7 +58,7 @@ Object.assign(App.prototype, {
         const isSpirit = fineliId === 906;
         const usesMl = [902, 906, 910, 920].includes(fineliId);
         return {
-            defaultAmount: options.defaultAmount ?? (isSpirit ? 40 : usesMl ? 330 : 2),
+            defaultAmount: options.defaultAmount ?? '',
             defaultUnit: options.defaultUnit ?? (usesMl ? 'ml' : 'dl'),
             presets: options.presets ?? (isSpirit ? [
                 { amount: 20, label: '2 cl' },

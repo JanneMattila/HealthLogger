@@ -44,10 +44,14 @@ async function testDrinkFavorites(browser, lang) {
 
         await page.getByRole('button', { name: '⭐ Saved wine', exact: true }).click();
         await page.locator('.ingredient-detail').waitFor();
+        assert(await page.locator('.ingredient-portion-amount').inputValue() === '',
+            `${lang}: drink amount starts empty`);
+        await page.locator('.ingredient-portion-amount').fill('2');
         assert((await page.locator('[data-nutrient="energy"]').textContent()).startsWith('170 kcal'),
             `${lang}: saved database wine opens directly with scaled energy`);
         assert((await page.locator('[data-nutrient="sugar"]').textContent()).startsWith('1.2 g'),
             `${lang}: saved wine retrieves full nutrition, including sugar`);
+        await page.locator('.ingredient-portion-amount').fill('');
         await page.locator('.ingredient-portion-preset[data-amount="500"]').click();
         assert((await page.locator('[data-nutrient="energy"]').textContent()).startsWith('425 kcal'),
             `${lang}: favorite nutrition recalculates when volume changes`);
@@ -60,6 +64,7 @@ async function testDrinkFavorites(browser, lang) {
 
         await page.getByRole('button', { name: '⭐ Legacy wine', exact: true }).click();
         await page.locator('.ingredient-detail').waitFor();
+        await page.locator('.ingredient-portion-amount').fill('2');
         assert((await page.locator('[data-nutrient="energy"]').textContent()).startsWith('160 kcal')
             && (await page.locator('[data-nutrient="carbohydrate"]').textContent()).startsWith('6 g'),
         `${lang}: existing manually saved favorites restore their stored energy and macros`);
@@ -82,6 +87,7 @@ async function testDrinkFavorites(browser, lang) {
         await page.locator('#btn-drink-cancel').click();
         await page.getByRole('button', { name: '⭐ Manual wine', exact: true }).click();
         await page.locator('.ingredient-detail').waitFor();
+        await page.locator('.ingredient-portion-amount').fill('2');
         assert((await page.locator('[data-nutrient="energy"]').textContent()).startsWith('140 kcal')
             && (await page.locator('[data-nutrient="sugar"]').textContent()).startsWith('3 g'),
         `${lang}: starring from manual entry preserves its nutrition and updates the list immediately`);
@@ -111,6 +117,7 @@ async function testDrinkFavorites(browser, lang) {
         });
         await page.getByRole('button', { name: '⭐ Custom wine', exact: true }).click();
         await page.locator('.ingredient-detail').waitFor();
+        await page.locator('.ingredient-portion-amount').fill('2');
         assert((await page.locator('[data-nutrient="energy"]').textContent()).startsWith('150 kcal')
             && (await page.locator('[data-nutrient="sugar"]').textContent()).startsWith('4 g')
             && (await page.locator('[data-nutrient="saturatedFat"]').textContent()).startsWith('0.2 g'),
@@ -132,8 +139,9 @@ async function testDrinkFavorites(browser, lang) {
         await page.getByRole('button', { name: '⭐ Saved beer', exact: true }).click();
         await page.locator('.ingredient-detail').waitFor();
         assert(await page.locator('.ingredient-amount-row select').inputValue() === 'ml'
-            && await page.locator('.ingredient-portion-amount').inputValue() === '330',
-        `${lang}: built-in favorites preserve their usual volume defaults`);
+            && await page.locator('.ingredient-portion-amount').inputValue() === '',
+        `${lang}: built-in favorites preserve their volume unit without a default amount`);
+        await page.locator('.ingredient-portion-preset[data-amount="330"]').click();
         await page.locator('.ingredient-add-btn').click();
         assert((await page.locator('.ingredient-confirmation').textContent()).includes('330 ml'),
             `${lang}: built-in favorite confirmation preserves volume units`);
