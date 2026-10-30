@@ -865,7 +865,8 @@ input[type="date"], input[type="time"] {
 }
 
 @media (max-width: 767px) {
-    .portion-content.ingredient-detail {
+    .portion-content.ingredient-detail,
+    .portion-content.recipe-use-dialog {
         width: 100%;
         max-width: none;
         height: 100vh;

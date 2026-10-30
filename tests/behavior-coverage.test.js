@@ -403,9 +403,11 @@ async function testSharedDrinkConsumption(browser, viewport, lang) {
             await page.locator(`#btn-quick-${drink.button}`).click();
             const detail = page.locator('.ingredient-detail[role="dialog"]');
             await detail.waitFor();
-            assert(await detail.locator('.ingredient-portion-amount').inputValue() === drink.amount
+            assert(await detail.locator('.ingredient-portion-amount').inputValue() === ''
                 && await detail.locator('.ingredient-amount-row select').inputValue() === drink.unit,
-            `${drink.button} retains its default drink amount and unit in ${lang}`);
+            `${drink.button} starts without a default amount and keeps its unit in ${lang}`);
+            await detail.locator('.ingredient-portion-amount').fill(drink.amount);
+            await detail.locator('.ingredient-portion-amount').blur();
             assert((await detail.locator('.ingredient-nutrition-heading').textContent()).includes(`${drink.volume} ml`)
                 && (await detail.locator('[data-nutrient="energy"]').textContent()).startsWith(`${drink.kcal} kcal`),
             `${drink.button} displays scaled nutrition in ${lang}`);
@@ -421,11 +423,14 @@ async function testSharedDrinkConsumption(browser, viewport, lang) {
                 ? bounds.x === 0 && bounds.y === 0 && bounds.width === viewport.width && bounds.height === viewport.height
                 : bounds.width === 500,
             `drinks share the ingredient layout at width ${viewport.width}`);
-            const preset = drink.button === 'spirit' ? 80 : 500;
+            const preset = drink.button === 'spirit' ? 20 : 100;
             await detail.locator(`.ingredient-portion-preset[data-amount="${preset}"]`).click();
-            assert(await detail.locator('.ingredient-portion-amount').inputValue() === String(preset)
-                && (await detail.locator('.ingredient-nutrition-heading').textContent()).includes(`${preset} ml`),
-            'drink presets set the volume and refresh nutrition');
+            await detail.locator(`.ingredient-portion-preset[data-amount="${preset}"]`).click();
+            const presetTotal = drink.volume + 2 * preset;
+            assert(await detail.locator('.ingredient-portion-amount').inputValue()
+                    === String(drink.unit === 'dl' ? presetTotal / 100 : presetTotal)
+                && (await detail.locator('.ingredient-nutrition-heading').textContent()).includes(`${presetTotal} ml`),
+            'drink presets add volume in the selected unit and refresh nutrition');
             await detail.locator('.ingredient-close-btn').click();
         }
 
@@ -469,8 +474,9 @@ async function testSharedDrinkConsumption(browser, viewport, lang) {
         await navigate(page, 'dashboard', '#water-intake-tile .water-tile');
         await page.locator('#water-intake-tile .water-tile').click();
         await page.locator('.ingredient-detail').waitFor();
-        assert((await page.locator('.ingredient-nutrition-heading').textContent()).includes('200 ml'),
-            'dashboard quick drinks use the shared nutrition dialog');
+        assert(await page.locator('.ingredient-portion-amount').inputValue() === ''
+            && (await page.locator('.ingredient-nutrition-heading').textContent()).includes('0 ml'),
+            'dashboard quick drinks use the shared nutrition dialog without a default amount');
         await page.locator('.ingredient-close-btn').click();
     } finally {
         await context.close();
@@ -493,8 +499,10 @@ async function testCustomDrinkConsumption(browser) {
         await page.locator('#drink-name').fill('Apple');
         await page.locator('#drink-search-results [data-id="custom-juice"]').click();
         await page.locator('.ingredient-detail').waitFor();
+        await page.locator('.ingredient-portion-amount').fill('2');
         assert((await page.locator('[data-nutrient="energy"]').textContent()).startsWith('90 kcal'),
             'custom drink search opens the same scaled nutrition dialog');
+        await page.locator('.ingredient-portion-amount').fill('');
         await page.locator('.ingredient-portion-preset[data-amount="240"]').click();
         await page.locator('.ingredient-add-btn').click();
         await page.locator('.ingredient-confirm-add').click();
@@ -509,8 +517,10 @@ async function testCustomDrinkConsumption(browser) {
         await page.locator('#drink-kcal').fill('60');
         await page.locator('#drink-protein').fill('3');
         await page.locator('#btn-drink-add').click();
+        await page.locator('.ingredient-portion-amount').fill('2');
         assert((await page.locator('[data-nutrient="energy"]').textContent()).startsWith('120 kcal'),
             'manually entered drink nutrition appears at the top of the shared dialog');
+        await page.locator('.ingredient-portion-amount').fill('');
         await page.locator('.ingredient-portion-preset[data-amount="500"]').click();
         await page.locator('.ingredient-add-btn').click();
         await page.locator('.ingredient-confirm-add').click();
@@ -704,6 +714,10 @@ async function testToolsCalorieCalculator(browser) {
         await page.waitForFunction(() => document.getElementById('tools-weight').value === '100');
         assert(await page.evaluate(() => window.location.pathname) === '/tools',
             'tools: page is routed to /tools');
+        assert(await page.locator('#tools-calorie-form [name="protein"]').inputValue() === '90'
+            && await page.locator('#tools-calorie-form [name="carbs"]').inputValue() === '260'
+            && await page.locator('#tools-calorie-form [name="fat"]').inputValue() === '67',
+            'tools: calculator starts with the recommended macro split');
 
         await page.locator('#tools-calorie-form [name="protein"]').fill('100');
         await page.locator('#tools-calorie-form [name="carbs"]').fill('250');
@@ -809,6 +823,10 @@ async function testRecentSearchAndPagination(browser) {
         assert(await rows.count() === 25, 'task 13: recent items initially render a bounded page of 25');
         assert(await page.locator('.recent-load-more').isVisible(),
             'task 13: more recent items can be requested when results remain');
+        await search.pressSequentially('berry');
+        assert(await search.inputValue() === 'berry'
+            && await search.evaluate(input => document.activeElement === input),
+            'task 13: typing in recent search keeps character order and focus');
         await search.fill('berry');
         assert(await rows.count() === 25, 'task 13: recent search filters case-insensitively and resets pagination');
         await page.locator('.recent-load-more').click();
