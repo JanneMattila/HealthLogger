@@ -361,7 +361,7 @@ Object.assign(App.prototype, {
                     <h4>${this.t('add_as_consumption')}</h4>
                     <label for="${ids.amount}">${this.t('ingredient_amount_label')}</label>
                     <div class="ingredient-amount-row">
-                        <input class="ingredient-portion-amount" type="number" id="${ids.amount}" value="${drink ? drink.defaultAmount : (unitWeightGrams ? 1 : defaultPortionGrams)}" min="0.1" step="${drink ? '0.5' : '0.1'}" />
+                        <input class="ingredient-portion-amount" type="number" id="${ids.amount}" value="${drink ? drink.defaultAmount : (unitWeightGrams ? 1 : '')}" min="0.1" step="${drink ? '0.5' : '0.1'}" />
                         <label class="visually-hidden" for="${ids.unit}">${this.t('unit_singular')}</label>
                         <select id="${ids.unit}">
                             ${drink ? ['dl', 'ml', 'cup', 'glass', 'l'].map(unit =>
@@ -453,7 +453,7 @@ Object.assign(App.prototype, {
             if (unitSelect.value === 'unit') {
                 amountInput.value = 1;
             } else if (previousUnit === 'unit') {
-                amountInput.value = defaultPortionGrams;
+                amountInput.value = '';
             }
             previousUnit = unitSelect.value;
             renderPortionPresets();
@@ -485,7 +485,7 @@ Object.assign(App.prototype, {
                 if (!unitWeightGrams && unitSelect.value === 'unit') {
                     unitSelect.value = 'g';
                     previousUnit = 'g';
-                    amountInput.value = defaultPortionGrams;
+                    amountInput.value = '';
                 }
                 updateNutritionTable();
                 this.showToast(this.t('ingredient_weights_saved'));
