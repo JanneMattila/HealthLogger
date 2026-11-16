@@ -1,16 +1,22 @@
 const API = {
-    async request(method, url, data = null, responseType = 'json') {
+    async request(method, url, data = null, responseType = 'json', extraHeaders = null) {
         const options = {
             method,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...extraHeaders },
             credentials: 'same-origin'
         };
         if (data) options.body = JSON.stringify(data);
+        if (extraHeaders?.['If-None-Match']) options.cache = 'no-store';
         const response = await fetch(url, options);
         if (response.status === 401) {
             window.authManager?.showLogin();
             throw new Error('Unauthorized');
         }
+        const favoritesVersion = response.headers.get('X-Favorites-Version');
+        if (favoritesVersion !== null && (response.ok || response.status === 304)) {
+            window.app?.onServerFavoritesVersion?.(Number(favoritesVersion));
+        }
+        if (response.status === 304) return null;
         if (!response.ok) {
             const error = new Error(`API error: ${response.status}`);
             error.status = response.status;
@@ -95,4 +101,7 @@ const API = {
     exportData: () => API.request('GET', '/api/reports/export', null, 'text-file'),
     getPreferences: () => API.request('GET', '/api/user/preferences'),
     savePreferences: (prefs) => API.request('PUT', '/api/user/preferences', prefs),
+    getFavorites: (knownVersion = null) => API.request('GET', '/api/user/favorites', null, 'json',
+        knownVersion === null ? null : { 'If-None-Match': `"${knownVersion}"` }),
+    saveFavorites: (favorites) => API.request('PUT', '/api/user/favorites', { favorites }),
 };

@@ -219,6 +219,8 @@ builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<NutritionSearchService>();
 builder.Services.AddScoped<BarcodeFoodLookupService>();
 builder.Services.AddSingleton<LocalizationService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<FavoritesVersionCache>();
 
 // Configure QuestPDF
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
@@ -284,6 +286,22 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Stamp the user's favorites version on API responses so clients can detect changes made
+// on other devices without polling.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api")
+        && !context.User.HasClaim(claim => claim.Type == "guest_user_id")
+        && Guid.TryParse(context.User.FindFirst("app_user_id")?.Value, out var favoritesUserId))
+    {
+        var versionCache = context.RequestServices.GetRequiredService<FavoritesVersionCache>();
+        var userRepo = context.RequestServices.GetRequiredService<UserRepository>();
+        var version = await versionCache.GetAsync(favoritesUserId, userRepo);
+        context.Response.Headers[FavoritesVersionCache.HeaderName] = version.ToString();
+    }
+    await next();
+});
 
 app.MapControllers();
 

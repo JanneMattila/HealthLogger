@@ -434,6 +434,13 @@ namespace HealthLogger.Migrations
                     b.Property<bool>("EnableNotifications")
                         .HasColumnType("bit");
 
+                    b.Property<string>("Favorites")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("FavoritesVersion")
+                        .HasColumnType("bigint");
+
                     b.Property<double?>("HeightCm")
                         .HasColumnType("float");
 

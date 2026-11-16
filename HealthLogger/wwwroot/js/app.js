@@ -120,6 +120,7 @@ class App {
     }
 
     async onAuthenticated() {
+        this.startFavoritesSync(window.authManager?.userId);
         await this.loadUserPreferences();
         this.applyTranslations();
         this.init();
