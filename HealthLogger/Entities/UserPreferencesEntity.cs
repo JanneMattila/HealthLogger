@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace HealthLogger.Entities;
 
 public class UserPreferencesEntity
@@ -21,6 +23,10 @@ public class UserPreferencesEntity
     public string? OutboundIntegrationUrl { get; set; }
     public bool InboundIntegrationEnabled { get; set; }
     public string? InboundIntegrationKey { get; set; }
+    [JsonIgnore]
+    public string Favorites { get; set; } = "[]"; // JSON array, served via /api/user/favorites
+    [JsonIgnore]
+    public long FavoritesVersion { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

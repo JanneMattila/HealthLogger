@@ -58,4 +58,30 @@ public class UserRepository
         _db.UserPreferences.Update(preferences);
         await _db.SaveChangesAsync();
     }
+
+    public async Task<(long Version, string Favorites)> GetFavoritesAsync(Guid userId)
+    {
+        var result = await _db.UserPreferences
+            .Where(p => p.UserId == userId)
+            .Select(p => new { p.FavoritesVersion, p.Favorites })
+            .FirstOrDefaultAsync();
+        return result is null ? (0, "[]") : (result.FavoritesVersion, result.Favorites);
+    }
+
+    public Task<long> GetFavoritesVersionAsync(Guid userId) =>
+        _db.UserPreferences
+            .Where(p => p.UserId == userId)
+            .Select(p => p.FavoritesVersion)
+            .FirstOrDefaultAsync();
+
+    public async Task<long> SaveFavoritesAsync(Guid userId, string favoritesJson)
+    {
+        await GetOrCreatePreferencesAsync(userId.ToString());
+        await _db.UserPreferences
+            .Where(p => p.UserId == userId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.Favorites, favoritesJson)
+                .SetProperty(p => p.FavoritesVersion, p => p.FavoritesVersion + 1));
+        return await GetFavoritesVersionAsync(userId);
+    }
 }
