@@ -136,6 +136,38 @@ try {
     exit 1
 }
 
+# Ensure the App Service runtime matches the project's target framework
+Write-Step "Verifying App Service runtime..."
+[xml]$projectXml = Get-Content -Path "HealthLogger/HealthLogger.csproj" -Raw
+$targetFramework = ($projectXml.Project.PropertyGroup | ForEach-Object { $_.TargetFramework } | Where-Object { $_ } | Select-Object -First 1)
+if ($targetFramework -notmatch '^net(\d+\.\d+)$') {
+    Write-Error "Unable to determine .NET version from TargetFramework '$targetFramework'"
+    exit 1
+}
+$requiredRuntime = "DOTNETCORE|$($Matches[1])"
+$currentRuntime = $appService.siteConfig.linuxFxVersion
+if ($currentRuntime -ne $requiredRuntime) {
+    if ($WhatIf) {
+        Write-Info "Would update runtime from '$currentRuntime' to '$requiredRuntime'"
+    } else {
+        Write-Info "Updating runtime from '$currentRuntime' to '$requiredRuntime'..."
+        # az is a .cmd wrapper on Windows, so the '|' must be quoted to avoid cmd.exe treating it as a pipe.
+        $runtimeArgument = if ($IsWindows -or $env:OS -eq 'Windows_NT') { "`"$requiredRuntime`"" } else { $requiredRuntime }
+        az webapp config set `
+            --resource-group $ResourceGroup `
+            --name $AppName `
+            --linux-fx-version $runtimeArgument `
+            --output none
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to update App Service runtime to '$requiredRuntime'"
+            exit 1
+        }
+        Write-Success "Runtime updated to $requiredRuntime"
+    }
+} else {
+    Write-Success "Runtime $requiredRuntime matches target framework $targetFramework"
+}
+
 if ($WhatIf) {
     Write-Step "WhatIf Mode - Skipping deployment"
     Write-Info "Would deploy to: https://$($appService.defaultHostName)"
