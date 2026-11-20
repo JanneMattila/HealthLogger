@@ -166,32 +166,22 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 });
 
 // Configure database
-var databaseProvider = builder.Configuration.GetValue<string>("DatabaseProvider") ?? "SqlServer";
-var connectionString = builder.Configuration.GetConnectionString(databaseProvider);
+var connectionString = builder.Configuration.GetConnectionString("SqlServer");
 
 if (string.IsNullOrEmpty(connectionString))
 {
-    throw new InvalidOperationException($"{databaseProvider} connection string not found in configuration");
+    throw new InvalidOperationException("SqlServer connection string not found in configuration");
 }
-
-Console.WriteLine($"[Database] Using provider: {databaseProvider}");
 
 builder.Services.AddDbContext<HealthLoggerDbContext>(options =>
 {
-    if (databaseProvider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+    options.UseSqlServer(connectionString, sqlOptions =>
     {
-        options.UseSqlServer(connectionString, sqlOptions =>
-        {
-            sqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(30),
-                errorNumbersToAdd: null);
-        });
-    }
-    else
-    {
-        options.UseSqlite(connectionString);
-    }
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null);
+    });
 
     if (builder.Environment.IsDevelopment())
     {

@@ -22,8 +22,8 @@ A comprehensive calorie intake and wellness tracking application built with ASP.
 
 ## Tech Stack
 
-- **Backend:** ASP.NET Core 10.0 (Minimal APIs)
-- **Database:** SQL Server / SQLite
+- **Backend:** ASP.NET Core 11.0 (Minimal APIs)
+- **Database:** SQL Server (LocalDB for local development)
 - **ORM:** Entity Framework Core
 - **Frontend:** Vanilla JavaScript (ES6+)
 - **Charts:** Chart.js
@@ -40,7 +40,7 @@ Data sourced from **Fineli® — National Food Composition Database**, maintaine
 
 ### Prerequisites
 
-- .NET 10.0 SDK
+- .NET 11.0 SDK
 - SQL Server (LocalDB, Docker, or full installation)
 
 ### Development Setup
@@ -63,7 +63,7 @@ docker-compose up -d
 ### Configuration
 
 Update `appsettings.json` for:
-- **Database:** SqlServer or SQLite connection string
+- **Database:** SqlServer connection string
 - **Azure AD:** Client ID and secret for Entra ID auth
 - **Azure OpenAI:** Endpoint and API key for food photo recognition
 
