@@ -1,8 +1,7 @@
 # Database
 
-HealthLogger uses Entity Framework Core with either SQL Server or SQLite. The
-provider is selected by the `DatabaseProvider` configuration value and its
-matching connection string. SQL Server is the default.
+HealthLogger uses Entity Framework Core with SQL Server. Local development uses
+SQL Server LocalDB through the `SqlServer` connection string.
 
 The EF Core model is defined in
 `HealthLogger/Data/HealthLoggerDbContext.cs`, and schema changes are tracked in
@@ -182,8 +181,7 @@ erDiagram
 
 `PK` means primary key, `FK` means foreign key, and `UK` means a unique key or
 unique index. SQL Server stores GUIDs as `uniqueidentifier`, strings as
-`nvarchar`, and `DateOnly` values as `date`. SQLite maps these logical types to
-its native storage classes.
+`nvarchar`, and `DateOnly` values as `date`.
 
 ## Meal and recipe structure
 

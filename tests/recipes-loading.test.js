@@ -107,6 +107,27 @@ async function settleRequest(page, index, outcome, value) {
         await settleRequest(page, 0, 'resolve', [{ id: 'older', name: 'Older recipe', ingredients: [], customCalories: 100 }]);
         assert(await page.locator('.recipe-table-row', { hasText: 'Newer recipe' }).count() === 1, 'newer request result wins an out-of-order race');
         assert(await page.getByText('Older recipe', { exact: true }).count() === 0, 'stale request cannot replace newer content');
+
+        await page.evaluate(() => {
+            const food = { id: 'food-egg', nameEn: 'Test egg', nameFi: 'Testimuna', energyKcal: 150, protein: 12, fat: 10, carbohydrate: 1, defaultPortionGrams: 60, unitWeightGrams: 60 };
+            API.searchFoods = async () => [food];
+            API.getFood = async () => ({ ...food });
+        });
+        await page.locator('#btn-new-recipe').click();
+        await page.locator('#recipe-food-search').fill('egg');
+        await page.locator('#recipe-search-results .search-result').click();
+        const detail = page.locator('.ingredient-detail[role="dialog"]');
+        await detail.waitFor();
+        assert(await detail.locator('.ingredient-portion-preset').count() > 0
+            && await detail.locator('option[value="unit"]').count() === 1,
+        'recipe editor uses the shared ingredient dialog with quantity presets and units');
+        assert(await detail.locator('input[type="time"]').count() === 0, 'recipe ingredient dialog hides meal context');
+        await detail.locator('.ingredient-portion-amount').fill('2');
+        await detail.locator('.ingredient-add-btn').click();
+        assert(await page.locator('.ingredient-confirmation, .ingredient-detail').count() === 0,
+            'adding to a recipe closes the dialog without meal confirmation');
+        assert(await page.locator('#recipe-ingredients-list .recipe-ingredient-amount input').inputValue() === '120',
+            'unit quantity is converted to grams in the recipe ingredient list');
     } finally {
         await browser.close();
     }

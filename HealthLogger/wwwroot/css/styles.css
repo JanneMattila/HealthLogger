@@ -740,9 +740,6 @@ input[type="date"], input[type="time"] {
 .ingredient-edit-status { min-height: 1.25rem; margin: 0.75rem 0; color: var(--text-secondary); }
 .ingredient-edit-status.error { color: var(--danger); }
 .ingredient-editor .portion-buttons .btn { flex: 1; }
-.recipe-ingredient-nutrition { margin-top: 0.5rem; }
-.recipe-ingredient-nutrition h4 { margin: 0 0 0.5rem; }
-.recipe-ingredient-dialog { max-width: 560px; }
 
 /* Charts */
 .chart-container, .weekly-trend, .metrics-history {

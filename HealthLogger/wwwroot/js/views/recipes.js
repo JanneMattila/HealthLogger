@@ -453,104 +453,23 @@ Object.assign(App.prototype, {
     },
 
     showRecipePortionDialog(food, ingredients, updateFn) {
-        const name = this.getLocalizedName(food);
-        const isFavorite = this.isFavorite(food.id);
-        const nutrients = [
-            { label: this.t('energy'), value: food.energyKcal, unit: 'kcal' },
-            { label: this.t('energy'), value: food.energyKj, unit: 'kJ' },
-            { label: this.t('protein_short'), value: food.protein, unit: 'g' },
-            { label: this.t('fat_short'), value: food.fat, unit: 'g' },
-            { label: this.t('saturated_fat'), value: food.saturatedFat, unit: 'g' },
-            { label: this.t('carbs_short'), value: food.carbohydrate, unit: 'g' },
-            { label: this.t('sugar'), value: food.sugar, unit: 'g' },
-            { label: this.t('fiber_short'), value: food.fiber, unit: 'g' },
-            { label: this.t('salt'), value: food.salt, unit: 'g' }
-        ];
-        const formatNutrient = (value, unit) => value == null
-            ? '—'
-            : `${parseFloat(Number(value).toFixed(unit === 'g' ? 4 : 1))} ${unit}`;
-        const overlay = document.createElement('div');
-        overlay.className = 'portion-dialog';
-        overlay.innerHTML = `
-            <div class="portion-content recipe-ingredient-dialog">
-                <div class="portion-header">
-                    <h3>${name}</h3>
-                    <button class="btn-favorite ${isFavorite ? 'active' : ''}" id="btn-recipe-ingredient-favorite"
-                            title="${this.t('toggle_favorite')}" aria-label="${this.t('toggle_favorite')}">${isFavorite ? '★' : '☆'}</button>
-                </div>
-                <label>${this.t('portion_label')}</label>
-                <input type="number" id="portion-grams" value="100" min="0.01" step="any" />
-                <div class="recipe-ingredient-nutrition">
-                    <h4>${this.t('nutrition_facts')}</h4>
-                    <table class="nutrient-table">
-                        <thead>
-                            <tr><th></th><th>${this.t('per_100g')}</th><th>${this.t('for_amount')}</th></tr>
-                        </thead>
-                        <tbody>
-                            ${nutrients.map((nutrient, index) => `
-                                <tr>
-                                    <td>${nutrient.label}${nutrient.unit === 'kJ' ? ' (kJ)' : ''}</td>
-                                    <td class="nutrient-value">${formatNutrient(nutrient.value, nutrient.unit)}</td>
-                                    <td class="nutrient-value" data-nutrient-index="${index}"></td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="portion-buttons">
-                    <button class="btn btn-secondary" id="btn-portion-cancel">${this.t('btn_cancel')}</button>
-                    <button class="btn btn-primary" id="btn-portion-add">${this.t('btn_add')}</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(overlay);
-        this.dismissOverlayOnClickOutside(overlay);
-        const favoriteButton = overlay.querySelector('#btn-recipe-ingredient-favorite');
-        favoriteButton.addEventListener('click', () => {
-            const nowFavorite = this.toggleFavorite({
-                id: food.id,
-                name,
-                type: 'food',
-                kcalPer100: Number(food.energyKcal) || 0,
-                protein: Number(food.protein) || 0,
-                fat: Number(food.fat) || 0,
-                carbs: Number(food.carbohydrate) || 0
-            });
-            favoriteButton.textContent = nowFavorite ? '★' : '☆';
-            favoriteButton.classList.toggle('active', nowFavorite);
-            document.querySelectorAll('.search-favorite').forEach(button => {
-                if (button.dataset.favoriteId !== String(food.id)) return;
-                button.textContent = nowFavorite ? '★' : '☆';
-                button.classList.toggle('active', nowFavorite);
-            });
+        this.showIngredientDetail(food, window.i18n?.lang || 'en', {
+            addHeadingKey: 'add_to_recipe',
+            skipConfirmation: true,
+            onAdd: ({ name, portionGrams }) => {
+                ingredients.push({
+                    id: food.id,
+                    name,
+                    portion: portionGrams,
+                    kcal: Number(food.energyKcal) || 0
+                });
+                updateFn();
+                const searchInput = document.getElementById('recipe-food-search');
+                const searchResults = document.getElementById('recipe-search-results');
+                if (searchInput) searchInput.value = '';
+                if (searchResults) searchResults.replaceChildren();
+            }
         });
-        const portionInput = overlay.querySelector('#portion-grams');
-        const updateNutrition = () => {
-            const grams = parseFloat(portionInput.value) || 0;
-            overlay.querySelectorAll('[data-nutrient-index]').forEach(cell => {
-                const nutrient = nutrients[Number(cell.dataset.nutrientIndex)];
-                const amountValue = nutrient.value == null ? null : Number(nutrient.value) * grams / 100;
-                cell.textContent = formatNutrient(amountValue, nutrient.unit);
-            });
-        };
-        portionInput.addEventListener('input', updateNutrition);
-        updateNutrition();
-        overlay.querySelector('#btn-portion-cancel').onclick = () => overlay.remove();
-        overlay.querySelector('#btn-portion-add').onclick = () => {
-            const grams = parseFloat(portionInput.value) || 100;
-            ingredients.push({
-                id: food.id,
-                name,
-                portion: grams,
-                kcal: Number(food.energyKcal) || 0
-            });
-            updateFn();
-            const searchInput = document.getElementById('recipe-food-search');
-            const searchResults = document.getElementById('recipe-search-results');
-            if (searchInput) searchInput.value = '';
-            if (searchResults) searchResults.replaceChildren();
-            overlay.remove();
-        };
     },
 
     buildRecipeMealItems(recipe, multiplier, grams, calories, nutrientValues) {

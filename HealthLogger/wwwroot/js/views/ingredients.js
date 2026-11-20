@@ -358,7 +358,7 @@ Object.assign(App.prototype, {
                     <button type="button" class="btn btn-secondary btn-sm ingredient-save-weights">${this.t('btn_save')}</button>
                 </div>`}
                 <div class="ingredient-consumption">
-                    <h4>${this.t('add_as_consumption')}</h4>
+                    <h4>${this.t(options.addHeadingKey || 'add_as_consumption')}</h4>
                     <label for="${ids.amount}">${this.t('ingredient_amount_label')}</label>
                     <div class="ingredient-amount-row">
                         <input class="ingredient-portion-amount" type="number" id="${ids.amount}" value="${drink ? drink.defaultAmount : (unitWeightGrams ? 1 : '')}" min="0.1" step="${drink ? '0.5' : '0.1'}" />
@@ -545,6 +545,21 @@ Object.assign(App.prototype, {
                 return;
             }
             const nutrition = getNutrition(portionGrams);
+            if (options.skipConfirmation && options.onAdd) {
+                const addButton = event.currentTarget;
+                addButton.disabled = true;
+                Promise.resolve()
+                    .then(() => options.onAdd({ food, name, portionGrams, nutrition }))
+                    .then(() => {
+                        closeDetail();
+                        options.onAdded?.();
+                    }, error => {
+                        console.error('Ingredient add failed:', error);
+                        addButton.disabled = false;
+                        this.showToast(this.t('add_failed'), 'error');
+                    });
+                return;
+            }
             const mealContext = options.getMealContext?.() || {};
             const mealType = mealContext.mealType || mealTypeSelect.value;
             const consumptionTime = mealContext.consumptionTime || consumptionTimeInput.value;
